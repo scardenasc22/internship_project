@@ -1,0 +1,16 @@
+-- To Do?
+* Memory for Generator-Evaluator + Human
+* tokens usage
+* get resume chunks related to each criteria component for prompt injection
+
+-- session 20250916
+* weights 
+* relevant experience parameter from candidates
+* validation layer: Hiring manager agent? How to validate?
+* personalised technical assessment (?)
+* project description: which consultant can I send? Wishes? Availability? Training?
+* Modify the consultant profile to the send for a company
+* add the name instead of id 
+
+-- other branch of this
+* comunication skills based on videos

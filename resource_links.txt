@@ -1,0 +1,37 @@
+-- getting started tutorials
+https://langchain-ai.github.io/langgraph/tutorials/get-started/2-add-tools/
+-- agent workflows
+https://langchain-ai.github.io/langgraph/tutorials/workflows/
+-- langchain tutorial documentation
+https://github.com/langchain-ai/langchain-academy/blob/main/module-1/router.ipynb
+-- documentation guides
+https://langchain-ai.github.io/langgraph/guides/
+-- langraph course
+https://www.youtube.com/watch?v=KU_FDwwL5_s&list=PLNIQLFWpQMRXmns-7UarmPIR6DN7bgEzZ&index=27
+-- langraph short course
+https://youtu.be/jGg_1h0qzaM?si=h76prCZotmUtknZP
+-- langgraph course from langchain devs
+https://www.youtube.com/watch?v=5h-JBkySK34&list=PLfaIDFEXuae16n2TWUkKq5PgJ0w6Pkwtg
+-- multi agent project
+https://github.com/FareedKhan-dev/Multi-Agent-AI-System
+
+
+-- other relevant links
+    "https://langchain-ai.github.io/langgraph/",  # Main documentation page
+    "https://langchain-ai.github.io/langgraph/tutorials/customer-support/customer-support/",  # Customer support tutorial
+    "https://langchain-ai.github.io/langgraph/tutorials/chatbots/information-gather-prompting/",  # Chatbot tutorial
+    "https://langchain-ai.github.io/langgraph/tutorials/code_assistant/langgraph_code_assistant/",  # Code assistant tutorial
+    "https://langchain-ai.github.io/langgraph/tutorials/multi_agent/multi-agent-collaboration/",  # Multi-agent collaboration
+    "https://langchain-ai.github.io/langgraph/tutorials/multi_agent/agent_supervisor/",  # Agent supervisor pattern
+    "https://langchain-ai.github.io/langgraph/tutorials/multi_agent/hierarchical_agent_teams/",  # Hierarchical agent teams
+    "https://langchain-ai.github.io/langgraph/tutorials/plan-and-execute/plan-and-execute/",  # Plan and execute pattern
+    "https://langchain-ai.github.io/langgraph/tutorials/rewoo/rewoo/",  # ReWOO (Reasoning WithOut Observation) tutorial
+    "https://langchain-ai.github.io/langgraph/tutorials/llm-compiler/LLMCompiler/",  # LLM Compiler tutorial
+    "https://langchain-ai.github.io/langgraph/concepts/high_level/",  # High-level concepts
+    "https://langchain-ai.github.io/langgraph/concepts/low_level/",  # Low-level concepts
+    "https://langchain-ai.github.io/langgraph/concepts/agentic_concepts/",  # Agentic concepts
+    "https://langchain-ai.github.io/langgraph/concepts/human_in_the_loop/",  # Human-in-the-loop concepts
+    "https://langchain-ai.github.io/langgraph/concepts/multi_agent/",  # Multi-agent concepts
+    "https://langchain-ai.github.io/langgraph/concepts/persistence/",  # Persistence concepts
+    "https://langchain-ai.github.io/langgraph/concepts/streaming/",  # Streaming concepts
+    "https://langchain-ai.github.io/langgraph/concepts/faq/"  # Frequently asked questions

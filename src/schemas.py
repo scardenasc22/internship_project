@@ -1,6 +1,7 @@
 from pydantic import BaseModel, Field, field_validator
 from typing import List, Any, Optional, Literal, Dict, Annotated
 from langgraph.graph.message import add_messages
+from langchain_core.messages import AnyMessage, BaseMessage, HumanMessage, AIMessage
 
 class EvaluationCriteria(BaseModel):
     """criteria to evaluate candidates"""
@@ -87,7 +88,7 @@ class CompanyDetails(BaseModel):
 
 class WorkflowState(BaseModel):
     """information that will flow through the graph"""
-    messages : Annotated[List, add_messages] = None
+    messages : Annotated[List[AnyMessage], add_messages] = None
     job_criteria : Optional[EvaluationCriteria] = None
     company_info : Optional[CompanyDetails] = None
     job_description : str
@@ -103,8 +104,3 @@ class WorkflowState(BaseModel):
     batches : Optional[int] = 4
     # storing folder
     scores_folder : str 
-    # usage token counter
-    token_usage: Optional[Dict[str, Dict]] = Field(
-        default_factory = dict,
-        description = "Dictionary storing token usage for each node."
-    )
