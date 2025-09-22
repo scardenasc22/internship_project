@@ -87,4 +87,7 @@ def scores_to_dataframe(candidates_scores: Dict[str, Dict[str, int]], n_groups: 
     # Assign the shuffled group IDs to the DataFrame
     df['group_id'] = group_ids
     
+    # Set the group_id as index as well 
+    df.set_index(keys = ['candidate_id', 'group_id'], inplace = True)
+    
     return df

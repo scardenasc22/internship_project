@@ -14,3 +14,11 @@
 
 -- other branch of this
 * comunication skills based on videos
+
+-- 20250922 tasks list:
+* add conversation memory using messages (DONE)
+* add weights of components to the prompt (DONE)
+* compute the total score based on the weights (DONE)
+* filter the best overall candidates (DONE)
+* generate interview questions for the best candidates (DONE)
+* generate a structured output for the candidates experience as JSON file

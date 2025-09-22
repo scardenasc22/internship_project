@@ -2,6 +2,7 @@ from pydantic import BaseModel, Field, field_validator
 from typing import List, Any, Optional, Literal, Dict, Annotated
 from langgraph.graph.message import add_messages
 from langchain_core.messages import AnyMessage, BaseMessage, HumanMessage, AIMessage
+from numpy import sum
 
 class EvaluationCriteria(BaseModel):
     """criteria to evaluate candidates"""
@@ -17,30 +18,20 @@ class EvaluationCriteria(BaseModel):
     culture : List[str] = Field(
         description = "List of traits that align with the company's culture and values"
     )
-    @field_validator("*")
+    weights : List[int] = Field(
+        description = "List of weights for each component"
+    )
+    @field_validator("weights")
+    @classmethod
+    def check_weigths(cls, v : List[int]):
+        if sum(v) != 100:
+            raise ValueError("The weights must add to exactly 100")
+        return v
+    @field_validator("domains", "technical_skills", "soft_skills", "culture")
     @classmethod
     def check_criteria(cls, v: List[str]):
         if len(v) == 0:
             raise ValueError("The list should contain at least one value")
-        return v
-
-class CriteriaWeights(BaseModel):
-    """class for the weights of components derived from the evaluation criteria"""
-    domains: int = Field(..., ge=0, le=100)
-    technical_skills: int = Field(..., ge=0, le=100)
-    soft_skills: int = Field(..., ge=0, le=100)
-    culture: int = Field(..., ge=0, le=100)
-    
-class WeightedEvaluationCriteria(BaseModel):
-    criteria: EvaluationCriteria
-    weights: CriteriaWeights
-    
-    @field_validator('weights')
-    @classmethod
-    def check_sum_of_weights(cls, v: CriteriaWeights):
-        total_weight = v.domains + v.technical_skills + v.soft_skills + v.culture
-        if total_weight != 100:
-            raise ValueError(f"Sum of weights must be 100, but got {total_weight}")
         return v
 
 class EvaluationScores(BaseModel):
@@ -85,6 +76,25 @@ class CompanyDetails(BaseModel):
         ...,
         description = "Brief description of the company"
     )
+
+class InterviewQuestions(BaseModel):
+    """generation of interview questions"""
+    name : str = Field(
+        description = "Name of the candidate"
+    )
+    experience_questions : List[str] = Field(
+        description = "List of questions aimed to clarify or expand upon the candidate's professional experience"
+    )
+    situational_questions : List[str] = Field(
+        description = "List of questions aimed to understand the candidate's behavior, problem-solving abilities, and soft skills in relation to the target role"
+    )
+    @field_validator("experience_questions", "situational_questions")
+    @classmethod
+    def check_questions(cls, v: List[int]):
+        # This validator is crucial for ensuring data integrity
+        if len(v) == 0:
+            raise ValueError("The list should contain at least one value")
+        return v
 
 class WorkflowState(BaseModel):
     """information that will flow through the graph"""

@@ -4,7 +4,7 @@ from schemas import (
     EvaluationCriteria,
     CompanyDetails,
     EvaluationScores,
-    WeightedEvaluationCriteria
+    InterviewQuestions
 )
 from functions import (
     print_execution_status,
@@ -19,10 +19,13 @@ from prompts import (
     criteria_with_feedback_prompt, 
     refinement_prompt, 
     company_details_request_prompt,
-    scoring_prompt
+    scoring_prompt,
+    interview_questions_prompt
 )
-from langchain_core.messages import BaseMessage, HumanMessage, AIMessage
+from langchain_core.messages import HumanMessage, AIMessage
 from typing import Literal
+from pandas import read_csv
+from json import dump
 import os
 
 # loading environment variables
@@ -73,9 +76,8 @@ def criteria_generation(state : WorkflowState) -> WorkflowState:
     """the agent generates the criteria to evaluate each candidate"""
     llm_constrained = llm.with_structured_output(schema = EvaluationCriteria)
     # check if there is any feedback from previous interactions
-    if not state.criteria_feedback:
-        criteria_chain = criteria_prompt | llm_constrained
-        msg = criteria_chain.invoke({
+    if not state.criteria_feedback: # initial generation when there is no feedback
+        initial_messages = criteria_prompt.invoke({
             "job_description" : state.job_description,
             "company_info" : (
                 f"Company Name: {state.company_info.name}\n"
@@ -83,10 +85,10 @@ def criteria_generation(state : WorkflowState) -> WorkflowState:
                 f"Sector: {state.company_info.sector}\n"
                 f"Description: {state.company_info.description}\n"
             )
-        })
+        }).messages
+        state.messages = initial_messages
     else:
-        criteria_chain = criteria_with_feedback_prompt | llm_constrained
-        msg = criteria_chain.invoke({
+        followup_messages = criteria_with_feedback_prompt.invoke({
             "job_description" : state.job_description,
             "feedback" : state.criteria_feedback,
             "company_info" : (
@@ -95,8 +97,20 @@ def criteria_generation(state : WorkflowState) -> WorkflowState:
                 f"Sector: {state.company_info.sector}\n"
                 f"Description: {state.company_info.description}\n"
             )
-        })
-    state.job_criteria = msg
+        }).messages
+        state.messages += followup_messages
+    msg = llm_constrained.invoke(input = state.messages) # structured response from the llm
+    state.job_criteria = msg # update the criteria of the state graph
+    # append message of the generated criteria
+    state.messages += [
+        AIMessage(content = (
+            f"The generated criteria for the job description provided is:\n"
+            f"Domains: {','.join(state.job_criteria.domains)}\n"
+            f"Technical skills: {','.join(state.job_criteria.technical_skills)}\n"
+            f"Soft skills: {','.join(state.job_criteria.soft_skills)}\n"
+            f"Culture: {','.join(state.job_criteria.culture)}"
+        ))
+    ]
     return state
 
 # 3. feedback from another LLM
@@ -104,7 +118,6 @@ def criteria_generation(state : WorkflowState) -> WorkflowState:
 def llm_criteria_evaluation(state : WorkflowState) -> WorkflowState:
     """the agent evaluates the criteria for the role"""
     llm_constrained = llm.with_structured_output(schema = Refinement)
-    refinement_chain = refinement_prompt | llm_constrained
     # concatenating the whole criteria into a single string
     criteria_string = (
         f"Domains: {state.job_criteria.domains}\n"
@@ -112,15 +125,23 @@ def llm_criteria_evaluation(state : WorkflowState) -> WorkflowState:
         f"Soft skills: {state.job_criteria.soft_skills}\n"
         f"Culture: {state.job_criteria.culture}\n"
     )
-    # getting the feedback from the llm
-    msg = refinement_chain.invoke({
+    # refinement messages
+    refinement_messages = refinement_prompt.invoke({
         "job_description" : state.job_description,
         "criteria" : criteria_string
-    })
+    }).messages
+    # update the messages
+    state.messages += refinement_messages
+    # getting the structured response
+    msg = llm_constrained.invoke(input = state.messages)
     # updating the state of the graph
     state.criteria_feedback = msg.feedback
     state.criteria_status = msg.grade
     state.count += 1
+    # append the feedback to the conversation
+    state.messages += [AIMessage(content = (
+        f"The feedback on the criteria is: {state.criteria_feedback}"
+    ))]
     return state
 
 # 4. human feedback node
@@ -131,7 +152,8 @@ def human_criteria_assessment(state : WorkflowState) -> WorkflowState:
         f"Domains: {', '.join(state.job_criteria.domains)}\n"
         f"Technical skills: {', '.join(state.job_criteria.technical_skills)}\n"
         f"Soft skills: {', '.join(state.job_criteria.soft_skills)}\n"
-        f"Culture: {', '.join(state.job_criteria.culture)}"
+        f"Culture: {', '.join(state.job_criteria.culture)}\n"
+        f"Weigths: {state.job_criteria.weights}\n"
     )
     print(f"The job evaluation criteria is the following:")
     print("*"*30)
@@ -148,6 +170,11 @@ def human_criteria_assessment(state : WorkflowState) -> WorkflowState:
         print(f"Looping back for refinement")
         state.criteria_feedback = human_feedback
         state.criteria_status = "needs improvement"
+        # update the messages
+        state.messages += [HumanMessage(content = (
+            f"The feedback on the criteria is: {state.criteria_feedback}"
+        ))]
+        state.count = 0
     return state
 
 # 5. Collecting candidates info
@@ -180,6 +207,8 @@ def score_candidates(state : WorkflowState) -> WorkflowState:
         criteria.soft_skills + 
         criteria.culture
     )
+    # sanity check
+    assert len(all_criteria) == 20 # 4 components x 5 elements = 20
 
     # Initialize a temporary dictionary to hold all scores
     all_candidates_scores = {}
@@ -220,10 +249,79 @@ def export_scores(state : WorkflowState) -> WorkflowState:
         candidates_scores = state.candidates_scores,
         n_groups = state.batches
     )
+    # generate the overall score of the candidates
+    scores_df.fillna(value = 0, inplace = True)
+    # export to csv
     scores_df.to_csv(
         path_or_buf = os.path.join(state.scores_folder, "scores.csv"),
-        index = False
+        index = True
     )
+    return state
+
+# 8. calculating the overall score
+@print_execution_status
+def calculate_overall_score(state : WorkflowState) -> WorkflowState:
+    """calculate the overall score of the candidates"""
+    scores_df = read_csv(
+        filepath_or_buffer = os.path.join(state.scores_folder, "scores.csv"),
+        index_col = ["candidate_id", "group_id"]
+    )
+    weights = state.job_criteria.weights
+    # create the map of weigths and columns
+    col_weight_map = {
+        c : weights[0]/500 for c in scores_df.columns if c in state.job_criteria.domains
+    }
+    col_weight_map.update({
+        c : weights[1]/500 for c in scores_df.columns if c in state.job_criteria.technical_skills
+    })
+    col_weight_map.update({
+        c : weights[2]/500 for c in scores_df.columns if c in state.job_criteria.soft_skills
+    })
+    col_weight_map.update({
+        c : weights[3]/500 for c in scores_df.columns if c in state.job_criteria.culture
+    })
+    # calculate the overall score
+    scores_df['overall'] = sum(scores_df[col] * w for col, w in col_weight_map.items())
+    scores_df.to_csv(
+        path_or_buf = os.path.join(state.scores_folder, "scores.csv"),
+        index = True
+    )
+    return state
+
+# 9. creating the intreview questions for the best candidates
+@print_execution_status
+def generate_questions(state : WorkflowState) -> WorkflowState:
+    """reads the scores from the candidates, extracts the top three and generate interview questions for those candidates"""
+    # reads the scores of the candidates
+    scores_df = read_csv(
+        filepath_or_buffer = os.path.join(state.scores_folder, "scores.csv"),
+        index_col = "candidate_id"
+    )
+    # ids of the best candidates, and the number of candidates can be filtered
+    best_candidates_ids = scores_df.sort_values(by = "overall", ascending = False).head(3).index.to_list()
+    # candidates files
+    candidates_files = os.listdir(state.candidates_folder)
+    # files of the best candidates
+    best_candidates_paths = [
+        os.path.join(state.candidates_folder, f) for f in candidates_files if any(f.startswith(can_id) for can_id in best_candidates_ids)
+    ]
+    llm_constrained = llm.with_structured_output(schema = InterviewQuestions)
+    questions_chain = interview_questions_prompt | llm_constrained
+    for path in best_candidates_paths:
+        # generate interview questions for a candidate
+        msg = questions_chain.invoke({
+            "job_description" : state.job_description,
+            "candidate_resume" : text_extraction(path)
+        }) # structured output
+        name = msg.name
+        # exporing to JSON file
+        temp_file_path = os.path.join(state.scores_folder, f"interview_questions_{name}.json")
+        with open(temp_file_path, mode = "w") as json_file:
+            dump(
+                obj = msg.dict(),
+                fp = json_file,
+                indent = 4
+            )
     return state
 
 ### routing nodes
@@ -231,7 +329,9 @@ def export_scores(state : WorkflowState) -> WorkflowState:
 @print_execution_status
 def route_evalution(state : WorkflowState) -> Literal["accepted", "rejected"]:
     """Routes the evaluation based on the feedback and the counter"""
-    if state.criteria_status == "good" or state.count > 3:
+    # pruning some of the messages
+    state.messages = state.messages[-4:]
+    if state.criteria_status == "good" or state.count > 2:
         return "accepted"
     else:
         return "rejected"

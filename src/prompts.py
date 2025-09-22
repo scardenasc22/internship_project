@@ -5,25 +5,27 @@ from langchain_core.messages import ToolMessage, SystemMessage, HumanMessage
 criteria_template = [
     (
         "system",
-        (
-            "You are an expert recruiter. Your task is to analyze a job description and extract the key skills and areas"
-            "a candidate should be evaluated on. For each category, provide a concise list of strings. "
-            "Limit each list to a maximum of 5 elements and avoid making tool specific criteria."
-        ),
+        "You are an expert recruiter. Your task is to analyze a job description and extract the key skills and areas "
+        "a candidate should be evaluated on. For each category, provide a concise list of strings and a list "
+        "of the weights for each category.\n"
+        "Limit each list to a maximum of 5 elements and avoid making tool specific criteria. "
+        "The list of weights must add exactly 100 and the order must be the same as the specified categories. "
+        "Ensure that there is no repetition of criteria across different categories."
     ),
     (
         "human",
-        (
-            "Please provide a JSON object with the following keys. Each key's value should be a concise list of strings "
-            "relevant to the job description provided.\n\n"
-            "- **domains**: Key subject areas or industries relevant to the role.\n"
-            "- **technical_skills**: Specific technologies, programming languages, and tools required.\n"
-            "- **soft_skills**: Interpersonal abilities and qualities necessary for success at work.\n"
-            "- **culture**: Traits that align with the company's culture and values.\n\n"
-            "**Job Description:**\n{job_description}\n\n"
-            "**Company Details:**\n{company_info}\n\n"
-        ),
-    ),
+        "Please provide a JSON object with the following keys. "
+        "The first 4 values of the keys should be a concise list of 5 strings. "
+        "The 'weights' key should be a list of weights of the previous 4 keys "
+        "relevant to the job description provided.\n\n"
+        "- **domains**: Key subject areas or industries relevant to the role.\n"
+        "- **technical_skills**: Specific technologies, programming languages, and tools required.\n"
+        "- **soft_skills**: Interpersonal abilities and qualities necessary for success at work.\n"
+        "- **culture**: Traits that align with the company's culture and values.\n"
+        "- **weights**: [<integer_percentage_domains>, <integer_percentage_technical_skills>, <integer_percentage_soft_skills>, <integer_percentage_culture>]\n\n"
+        "**Job Description:**\n{job_description}\n\n"
+        "**Company Details:**\n{company_info}\n\n"
+    )
 ]
 criteria_prompt = ChatPromptTemplate.from_messages(messages = criteria_template)
 
@@ -31,27 +33,29 @@ criteria_prompt = ChatPromptTemplate.from_messages(messages = criteria_template)
 criteria_with_feedback_template = [
     (
         "system",
-        (
-            "You are an expert recruiter. Your task is to analyze a job description and extract the key skills and areas "
-            "a candidate should be evaluated on. For each category, provide a concise list of strings. "
-            "Limit each list to a maximum of 5 elements and avoid making tool specific criteria."
-        ),
+        "You are an expert recruiter. Your task is to analyze a job description and extract the key skills and areas "
+        "a candidate should be evaluated on. For each category, provide a concise list of strings and a list "
+        "of the weights for each category.\n"
+        "Limit each list to a maximum of 5 elements and avoid making tool specific criteria. "
+        "The list of weights must add exactly 100 and the order must be the same as the specified categories. "
+        "Ensure that there is no repetition of criteria across different categories."
     ),
     (
         "human",
-        (
-            "Please provide a JSON object with the following keys. Each key's value should be a concise list of strings "
-            "relevant to the job description provided.\n\n"
-            "- **domains**: Key subject areas or industries relevant to the role.\n"
-            "- **technical_skills**: Specific technologies, programming languages, and tools required.\n"
-            "- **soft_skills**: Interpersonal abilities and qualities necessary for success at work.\n"
-            "- **values_and_culture**: Traits that align with the company's culture and values.\n\n"
-            "**Job Description:**\n{job_description}\n\n"
-            "**Company Details:**\n{company_info}\n\n"
-            "Consider the following feedback when generating the critiera:\n"
-            "**Feedback:**\n\n{feedback}"
-        ),
-    ),
+        "Please provide a JSON object with the following keys. "
+        "The first 4 values of the keys should be a concise list of 5 strings. "
+        "The 'weights' key should be a list of weights of the previous 4 keys "
+        "relevant to the job description provided.\n\n"
+        "- **domains**: Key subject areas or industries relevant to the role.\n"
+        "- **technical_skills**: Specific technologies, programming languages, and tools required.\n"
+        "- **soft_skills**: Interpersonal abilities and qualities necessary for success at work.\n"
+        "- **culture**: Traits that align with the company's culture and values.\n"
+        "- **weights**: [<integer_percentage_domains>, <integer_percentage_technical_skills>, <integer_percentage_soft_skills>, <integer_percentage_culture>]\n\n"
+        "**Job Description:**\n{job_description}\n\n"
+        "**Company Details:**\n{company_info}\n\n"
+        "Consider the following feedback when generating the critiera:\n"
+        "**Feedback:**\n\n{feedback}"
+    )
 ]
 criteria_with_feedback_prompt = ChatPromptTemplate.from_messages(messages = criteria_with_feedback_template)
 
@@ -103,3 +107,26 @@ scoring_template = [
     ),
 ]
 scoring_prompt = ChatPromptTemplate.from_messages(messages=scoring_template)
+
+# interview questions prompt
+interview_questions_template = [
+    (
+        "system",
+        (
+            "You are an expert recruiter. Your task is to analyze a candidate's resume and a job description to "
+            "generate a set of interview questions. Your output must be a list of questions and the name of the candidate."
+        ),
+    ),
+    (
+        "human",
+        (
+            "Please provide a JSON object with the following keys.\n"
+            "- **Name**: <Name of the candidate>"
+            "- **Experience questions**: <List of 4 questions aimed to clarify or expand upon the candidate's professional experience, skills, and achievements. These questions should help assess the candidate's expertise and past job performance.>\n"
+            "- **Situational questions**: <List of 4 questions aimed to understand the candidate's behavior, problem-solving abilities, and soft skills in relation to the target role. These questions should explore how the candidate handles specific situations and challenges.>\n"
+            "\n\n**Job Description:**\n{job_description}"
+            "\n\n**Candidate Resume:**\n{candidate_resume}"
+        )
+    )
+]
+interview_questions_prompt = ChatPromptTemplate.from_messages(messages = interview_questions_template)
