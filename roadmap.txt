@@ -21,4 +21,4 @@
 * compute the total score based on the weights (DONE)
 * filter the best overall candidates (DONE)
 * generate interview questions for the best candidates (DONE)
-* generate a structured output for the candidates experience as JSON file
+* generate a structured output for the candidates experience as JSON file (DONE)

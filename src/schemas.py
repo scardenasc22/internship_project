@@ -96,6 +96,18 @@ class InterviewQuestions(BaseModel):
             raise ValueError("The list should contain at least one value")
         return v
 
+class JobExperience(BaseModel):
+    """Details about a single job experience."""
+    job_title: str = Field(..., description="The candidate's job title.")
+    company_name: str = Field(..., description="The name of the company.")
+    years_of_experience: str = Field(..., description="The duration of employment (e.g., '2020 - 2023' or '2 years').")
+    responsibilities: List[str] = Field(..., description="A list of key responsibilities and accomplishments.")
+
+class CandidateExperience(BaseModel):
+    """The structured extraction of a candidate's professional experience."""
+    experience: List[JobExperience] = Field(..., description="A list of all professional experiences listed on the resume.")
+
+
 class WorkflowState(BaseModel):
     """information that will flow through the graph"""
     messages : Annotated[List[AnyMessage], add_messages] = None
@@ -108,9 +120,11 @@ class WorkflowState(BaseModel):
     count : Optional[int] = 0
     # dictionary with the "id" : "resume" pairs
     candidates_dict : Optional[Dict[str, str]] = None
-    # dictory of the scores of each candidate
+    # dictionary of the scores of each candidate
     candidates_scores : Optional[Dict] = None
     # number of batches
     batches : Optional[int] = 4
     # storing folder
     scores_folder : str 
+    # dictionary with candidate experience
+    candidates_exp : Optional[Dict] = None

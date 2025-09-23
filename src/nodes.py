@@ -4,7 +4,8 @@ from schemas import (
     EvaluationCriteria,
     CompanyDetails,
     EvaluationScores,
-    InterviewQuestions
+    InterviewQuestions,
+    CandidateExperience
 )
 from functions import (
     print_execution_status,
@@ -20,7 +21,8 @@ from prompts import (
     refinement_prompt, 
     company_details_request_prompt,
     scoring_prompt,
-    interview_questions_prompt
+    interview_questions_prompt,
+    exp_extraction_prompt
 )
 from langchain_core.messages import HumanMessage, AIMessage
 from typing import Literal
@@ -268,6 +270,11 @@ def calculate_overall_score(state : WorkflowState) -> WorkflowState:
     )
     weights = state.job_criteria.weights
     # create the map of weigths and columns
+    # pythonic but unreliable way
+    # denominator = len(all_criteria) / len(weights)
+    # col_weght_map = {
+    #     c : weights[index//denominator]/500 for index, c in enumerate(df.columns) if c in all_criteria
+    # }
     col_weight_map = {
         c : weights[0]/500 for c in scores_df.columns if c in state.job_criteria.domains
     }
@@ -288,7 +295,44 @@ def calculate_overall_score(state : WorkflowState) -> WorkflowState:
     )
     return state
 
-# 9. creating the intreview questions for the best candidates
+# 9. extracting candidate experience
+@print_execution_status
+def extract_experience(state: WorkflowState) -> WorkflowState:
+    """extract the candidate experience and export to JSON"""
+    llm_extractor = llm.with_structured_output(schema = CandidateExperience)
+    extraction_chain = exp_extraction_prompt | llm_extractor
+    
+    # Initialize a temporary dictionary to hold all scores
+    all_candidates_exp = {}
+    
+    # Scoring the candidates
+    for id, resume in state.candidates_dict.items():
+        try:
+            # Ask the llm to extract the candidate experience
+            experience_object = extraction_chain.invoke({
+                "resume" : resume
+            }).model_dump() # dump the structured output into a dictionary
+        except Exception as e:
+            print(f"Error extracting the experience for the candidate '{id}': {e}")
+            experience_object = {}
+        # Update the temporary dictionary with the current candidate's experience
+        all_candidates_exp[id] = experience_object
+    
+    # Update the state with the complete dictionary of all candidates' scores
+    state.candidates_exp = all_candidates_exp
+    
+    # Export to a JSON file
+    file_path = os.path.join(state.scores_folder, "candidates_experience.json")
+    with open(file_path, mode = "w") as json_file:
+        dump(
+            obj = state.candidates_exp,
+            fp = json_file,
+            indent = 4
+        )
+
+    return state
+
+# 10. creating the intreview questions for the best candidates
 @print_execution_status
 def generate_questions(state : WorkflowState) -> WorkflowState:
     """reads the scores from the candidates, extracts the top three and generate interview questions for those candidates"""

@@ -130,3 +130,22 @@ interview_questions_template = [
     )
 ]
 interview_questions_prompt = ChatPromptTemplate.from_messages(messages = interview_questions_template)
+
+# experience extraction prompt
+exp_extraction_template = [
+    (
+        "system",
+        (
+            "You are an expert recruiter. Your task is to extract all professional experience from a candidate's resume "
+            "into a structured JSON format. Provide all job titles, company names, years of experience, and "
+            "a concise list of responsibilities for each role."
+        ),
+    ),
+    (
+        "human",
+        (
+            "Please extract the professional experience from the following resume:\n\n{resume}"
+        ),
+    )
+]
+exp_extraction_prompt = ChatPromptTemplate.from_messages(messages = exp_extraction_template)
