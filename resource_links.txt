@@ -14,6 +14,11 @@ https://youtu.be/jGg_1h0qzaM?si=h76prCZotmUtknZP
 https://www.youtube.com/watch?v=5h-JBkySK34&list=PLfaIDFEXuae16n2TWUkKq5PgJ0w6Pkwtg
 -- multi agent project
 https://github.com/FareedKhan-dev/Multi-Agent-AI-System
+-- project ideas
+https://github.com/ashishpatel26/500-AI-Agents-Projects
+-- llm apps
+https://github.com/Shubhamsaboo/awesome-llm-apps
+
 
 
 -- other relevant links

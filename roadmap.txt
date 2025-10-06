@@ -22,3 +22,18 @@
 * filter the best overall candidates (DONE)
 * generate interview questions for the best candidates (DONE)
 * generate a structured output for the candidates experience as JSON file (DONE)
+
+-- 20250923 tasks list:
+* remove the fields with many na values (Instead, do not count them on the criteria average)
+* find a way to redistribute the weights proportional of the removed columns (DONE)
+* do not count null values for the average (DONE)
+* explanation for each score and criteria component
+* based on the skills of the candidate, what technical questions can assess if the candidate really knows what they mentioned
+* behaviour in the workplace
+* non-tehcnical questions that validate if the candidate knows that he is talking about
+* evaluate what is the score for candidates like Nikki and Eric Zang compared to top candidates
+
+-- 20250930 tasks list:
+* evalute the candidates relative to others
+* provide post scoring explanations
+* add the name of the candidate to the csv file

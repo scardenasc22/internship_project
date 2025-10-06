@@ -10,7 +10,9 @@ from schemas import (
 from functions import (
     print_execution_status,
     text_extraction,
-    scores_to_dataframe
+    scores_to_dataframe,
+    auxiliary_col_calutation,
+    refined_overall_calculation
 )
 from dotenv import load_dotenv
 from langchain_openai import ChatOpenAI
@@ -251,8 +253,9 @@ def export_scores(state : WorkflowState) -> WorkflowState:
         candidates_scores = state.candidates_scores,
         n_groups = state.batches
     )
-    # generate the overall score of the candidates
-    scores_df.fillna(value = 0, inplace = True)
+    # delete columns that produce many NA values
+    # scores_df.dropna(axis = 1, inplace = True)
+    # to avoid qualities that are not present in all candidates
     # export to csv
     scores_df.to_csv(
         path_or_buf = os.path.join(state.scores_folder, "scores.csv"),
@@ -269,26 +272,43 @@ def calculate_overall_score(state : WorkflowState) -> WorkflowState:
         index_col = ["candidate_id", "group_id"]
     )
     weights = state.job_criteria.weights
-    # create the map of weigths and columns
-    # pythonic but unreliable way
-    # denominator = len(all_criteria) / len(weights)
-    # col_weght_map = {
-    #     c : weights[index//denominator]/500 for index, c in enumerate(df.columns) if c in all_criteria
-    # }
-    col_weight_map = {
-        c : weights[0]/500 for c in scores_df.columns if c in state.job_criteria.domains
-    }
-    col_weight_map.update({
-        c : weights[1]/500 for c in scores_df.columns if c in state.job_criteria.technical_skills
-    })
-    col_weight_map.update({
-        c : weights[2]/500 for c in scores_df.columns if c in state.job_criteria.soft_skills
-    })
-    col_weight_map.update({
-        c : weights[3]/500 for c in scores_df.columns if c in state.job_criteria.culture
-    })
-    # calculate the overall score
-    scores_df['overall'] = sum(scores_df[col] * w for col, w in col_weight_map.items())
+    # create the auxiliary columns for domain skills
+    scores_df = auxiliary_col_calutation(
+        df = scores_df,
+        columns = state.job_criteria.domains,
+        weight = weights[0]/100,
+        output_col_name = "domains"
+    )
+    # create the columns for tech skills
+    scores_df = auxiliary_col_calutation(
+        df = scores_df,
+        columns = state.job_criteria.technical_skills,
+        weight = weights[1]/100,
+        output_col_name = "tech_skills"
+    )
+    # create the auxiliary columns for soft skills
+    scores_df = auxiliary_col_calutation(
+        df = scores_df,
+        columns = state.job_criteria.soft_skills,
+        weight = weights[2]/100,
+        output_col_name = "soft_skills"
+    )
+    # create the auxiliary columns for culture
+    scores_df = auxiliary_col_calutation(
+        df = scores_df,
+        columns = state.job_criteria.culture,
+        weight = weights[3]/100,
+        output_col_name = "culture"
+    )
+    # calculate the refined average considering that some of the criteria can be null
+    cols_2_sum = [c for c in scores_df.columns if c.endswith("average")]
+    # calculate the refined average potential outliers
+    scores_df = refined_overall_calculation(
+        df = scores_df,
+        columns = cols_2_sum,
+        output_col_name = "overall"
+    )
+    # export the scores
     scores_df.to_csv(
         path_or_buf = os.path.join(state.scores_folder, "scores.csv"),
         index = True
@@ -342,7 +362,7 @@ def generate_questions(state : WorkflowState) -> WorkflowState:
         index_col = "candidate_id"
     )
     # ids of the best candidates, and the number of candidates can be filtered
-    best_candidates_ids = scores_df.sort_values(by = "overall", ascending = False).head(3).index.to_list()
+    best_candidates_ids = scores_df.sort_values(by = "overall_refined", ascending = False).head(3).index.to_list()
     # candidates files
     candidates_files = os.listdir(state.candidates_folder)
     # files of the best candidates

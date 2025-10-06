@@ -3,6 +3,7 @@ import pdfplumber
 import pandas as pd
 import numpy as np
 from typing import Dict, Any
+from timeit import default_timer
 
 def text_extraction(
     file_path : str
@@ -49,6 +50,16 @@ def print_execution_status(func):
         return result
     return wrapper
 
+def execution_time(func):
+    def wrapper(*args, **kargs):
+        start_time = default_timer()
+        result = func(*args, **kargs)
+        end_time = default_timer()
+        time_elapsed = end_time - start_time
+        print(f"'{func.__name__}' took {time_elapsed:.3f} seconds")
+        return result
+    return wrapper
+
 
 def scores_to_dataframe(candidates_scores: Dict[str, Dict[str, int]], n_groups: int) -> pd.DataFrame:
     """
@@ -91,3 +102,93 @@ def scores_to_dataframe(candidates_scores: Dict[str, Dict[str, int]], n_groups: 
     df.set_index(keys = ['candidate_id', 'group_id'], inplace = True)
     
     return df
+
+def auxiliary_col_calutation(
+    df : pd.DataFrame,
+    columns : list,
+    weight : float,
+    output_col_name : str
+):
+    """
+    Calculate auxiliary columns for a DataFrame based on a subset of columns.
+
+    This function creates a copy of the input DataFrame and calculates three auxiliary columns:
+    1. A count of NaN values for each row across the specified subset of columns.
+    2. A sum of non-NaN values for each row across the specified subset of columns.
+    3. A weighted average of the non-NaN values for each row across the specified subset of columns.
+
+    Parameters:
+    - df (pd.DataFrame): The input DataFrame.
+    - columns (list): A list of column names to be used for calculations.
+    - weight (float): The weight to apply in the weighted average calculation.
+    - output_col_name (str): The base name for the output columns. The function will create
+      columns named '<output_col_name>_na_count', '<output_col_name>_sum', and '<output_col_name>_average'.
+
+    Returns:
+    - pd.DataFrame: A copy of the input DataFrame with the additional auxiliary columns.
+
+    Notes:
+    - If all values in the specified columns are NaN for a row, the weighted average will be set to NaN.
+    - The function does not modify the original DataFrame; it operates on a copy.
+    """
+    # create a copy of the dataframe
+    df_copy = df.copy()
+    # counts the number of na values for each row over a set of columns
+    df_copy[f"{output_col_name}_na_count"] = df_copy[columns].isna().sum(axis = 1)
+    # adds the rows of a subset of columns if the values are not na
+    df_copy[f"{output_col_name}_sum"] = df_copy[columns].sum(axis = 1, skipna = True)
+    # calculates the weighted average of the subset of columns for the non-na values
+    df_copy[f"{output_col_name}_average"] = np.where(
+        df_copy[f"{output_col_name}_na_count"] == len(columns), # in case all the columns are nan
+        np.nan, # if all the nan then the result should be nan
+        df_copy[f"{output_col_name}_sum"] * (weight / (len(columns) - df_copy[f"{output_col_name}_na_count"]))  
+    )
+    # some of the axiliary columns can be dropped after the calculation
+    df_copy.drop(columns = [f"{output_col_name}_na_count", f"{output_col_name}_sum"], inplace = True)
+    return df_copy
+
+def refined_overall_calculation(
+    df : pd.DataFrame,
+    columns : list,
+    output_col_name : str
+):
+    """
+    Calculate a refined overall score for each row in a DataFrame, adjusting for missing (NaN) values.
+
+    This function creates a copy of the input DataFrame and computes a new column named
+    '<output_col_name>_refined', which represents the sum of the specified columns for each row,
+    scaled to account for any missing values. If some columns are NaN for a row, the sum is
+    proportionally scaled up as if all columns were present. If all columns are present, the sum
+    is unchanged.
+
+    Parameters:
+    - df (pd.DataFrame): The input DataFrame.
+    - columns (list): List of column names to include in the calculation.
+    - output_col_name (str): Base name for the output column. The function will create a column
+      named '<output_col_name>_refined'.
+
+    Returns:
+    - pd.DataFrame: A copy of the input DataFrame with the additional refined score column.
+
+    Notes:
+    - If all values in the specified columns are NaN for a row, the result will be NaN.
+    - The function does not modify the original DataFrame.
+    """
+    # create a copy of the data
+    df_copy = df.copy()
+    # calculate potential na values
+    df_copy[f"{output_col_name}_na_count"] = df_copy[columns].isna().sum(axis = 1)
+    # calculate the sum of the non-na values
+    df_copy[f"{output_col_name}_sum"] = df_copy[columns].sum(axis = 1, skipna = True)
+    # scale the sum based on the na values
+    df_copy[f"{output_col_name}_refined"] = np.where(
+        df_copy[f"{output_col_name}_na_count"] == len(columns),
+        np.nan,
+        np.where(
+            df_copy[f"{output_col_name}_na_count"] > 0, 
+            df_copy[f"{output_col_name}_sum"] * (len(columns) / (len(columns) - df_copy[f"{output_col_name}_na_count"])),
+            df_copy[f"{output_col_name}_sum"]
+        )
+    )
+    df_copy.drop(columns = [f"{output_col_name}_na_count", f"{output_col_name}_sum"], inplace = True)
+    return df_copy
