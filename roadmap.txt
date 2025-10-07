@@ -37,3 +37,8 @@
 * evalute the candidates relative to others
 * provide post scoring explanations
 * add the name of the candidate to the csv file
+
+-- 20251007 What to do today?
+* change the IDs from the table (DONE)
+* added name to the csv file (DONE)
+* add explanations of the scores (DONE)

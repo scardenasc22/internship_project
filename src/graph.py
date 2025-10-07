@@ -11,7 +11,8 @@ from nodes import (
     export_scores,
     generate_questions,
     calculate_overall_score,
-    extract_experience
+    extract_experience,
+    generate_explanations
 )
 from functions import text_extraction
 import os
@@ -29,6 +30,7 @@ workflow.add_node("export_scores", export_scores)
 workflow.add_node("calculate_overall_score", calculate_overall_score)
 workflow.add_node("generate_questions", generate_questions)
 workflow.add_node("extract_experience", extract_experience)
+workflow.add_node("generate_explanations", generate_explanations)
 # connecting the nodes
 workflow.add_edge(START, "get_company_info")
 workflow.add_edge("get_company_info", "criteria_generation")
@@ -56,7 +58,8 @@ workflow.add_edge("score_candidates", "export_scores")
 workflow.add_edge("export_scores", "calculate_overall_score")
 workflow.add_edge("calculate_overall_score", "extract_experience")
 workflow.add_edge("extract_experience", "generate_questions")
-workflow.add_edge("generate_questions", END)
+workflow.add_edge("generate_questions", "generate_explanations")
+workflow.add_edge("generate_explanations", END)
 # compile the workflow
 compiled_workflow = workflow.compile()
 
@@ -68,7 +71,7 @@ test_input = WorkflowState(
     job_description = text_extraction(
         file_path = os.path.join(root, "data/raw/job/data_role_des.txt")
     ),
-    candidates_folder = os.path.join(root, "data", "raw", "cv"),
+    candidates_folder = os.path.join(root, "data", "raw", "cv_subset"),
     count = 0,
     batches = 4,
     scores_folder = os.path.join(root, "data", "processed")

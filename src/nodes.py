@@ -5,14 +5,16 @@ from schemas import (
     CompanyDetails,
     EvaluationScores,
     InterviewQuestions,
-    CandidateExperience
+    CandidateExperience,
+    GroupRationales
 )
 from functions import (
     print_execution_status,
     text_extraction,
     scores_to_dataframe,
     auxiliary_col_calutation,
-    refined_overall_calculation
+    refined_overall_calculation,
+    execution_time
 )
 from dotenv import load_dotenv
 from langchain_openai import ChatOpenAI
@@ -24,13 +26,16 @@ from prompts import (
     company_details_request_prompt,
     scoring_prompt,
     interview_questions_prompt,
-    exp_extraction_prompt
+    exp_extraction_prompt,
+    rationale_prompt
 )
 from langchain_core.messages import HumanMessage, AIMessage
 from typing import Literal
 from pandas import read_csv
 from json import dump
 import os
+import numpy as np
+from itertools import combinations
 
 # loading environment variables
 load_dotenv()
@@ -69,7 +74,7 @@ def get_company_info(state : WorkflowState) -> WorkflowState:
     details = [f"Source {i + 1}: {info['content']}" for i, info in enumerate(web_results['results'])]
     # adding the internet search to the company description
     state.company_info.description += (
-        f"Information from the internet:"
+        f"Information from the internet: "
         "\n".join(details)
     )
     return state
@@ -192,11 +197,15 @@ def get_candidates_info(state : WorkflowState) -> WorkflowState:
         state.candidates_dict = {
             file.split("-")[0] : text_extraction(os.path.join(state.candidates_folder, file)) for file in resumes_list
         }
+        state.candidates_names = {
+            file.split("-")[0] : file.split(sep = '.')[0].split(sep = "-")[1].replace("_", " ").title() for file in resumes_list
+        }
     except Exception as e:
         raise Exception(f"Error while populating candidates info: {e}")
     return state
 
 # 6. ranking candidates
+@execution_time
 @print_execution_status
 def score_candidates(state : WorkflowState) -> WorkflowState:
     """Evaluate the candidates on the provided criteria"""
@@ -253,9 +262,10 @@ def export_scores(state : WorkflowState) -> WorkflowState:
         candidates_scores = state.candidates_scores,
         n_groups = state.batches
     )
-    # delete columns that produce many NA values
-    # scores_df.dropna(axis = 1, inplace = True)
-    # to avoid qualities that are not present in all candidates
+    # add the names colum
+    scores_df_reset = scores_df.reset_index()
+    scores_df_reset['names'] = scores_df_reset['candidate_id'].map(state.candidates_names)
+    scores_df = scores_df_reset.set_index(['candidate_id', 'group_id'])
     # export to csv
     scores_df.to_csv(
         path_or_buf = os.path.join(state.scores_folder, "scores.csv"),
@@ -271,6 +281,17 @@ def calculate_overall_score(state : WorkflowState) -> WorkflowState:
         filepath_or_buffer = os.path.join(state.scores_folder, "scores.csv"),
         index_col = ["candidate_id", "group_id"]
     )
+    assert len(scores_df.columns) == len(
+        state.job_criteria.domains +
+        state.job_criteria.technical_skills + 
+        state.job_criteria.soft_skills + 
+        state.job_criteria.culture
+    ) + 1 # one means the 'names column'
+    # print("Domains:", state.job_criteria.domains)
+    # print("Technical skills:", state.job_criteria.technical_skills)
+    # print("Soft skills:", state.job_criteria.soft_skills)
+    # print("Culture:", state.job_criteria.culture)
+    # print("CSV columns:", scores_df.columns.tolist())
     weights = state.job_criteria.weights
     # create the auxiliary columns for domain skills
     scores_df = auxiliary_col_calutation(
@@ -316,6 +337,7 @@ def calculate_overall_score(state : WorkflowState) -> WorkflowState:
     return state
 
 # 9. extracting candidate experience
+@execution_time
 @print_execution_status
 def extract_experience(state: WorkflowState) -> WorkflowState:
     """extract the candidate experience and export to JSON"""
@@ -388,6 +410,57 @@ def generate_questions(state : WorkflowState) -> WorkflowState:
             )
     return state
 
+# 11. scores rationale for the top candidates
+@print_execution_status
+def generate_explanations(state : WorkflowState) -> WorkflowState:
+    """generate the explantions for the top candidates by comparing their resume and their scores in the most relevant criteria"""
+    # list of list of criteria components
+    all_criteria = [
+        state.job_criteria.domains,
+        state.job_criteria.technical_skills,
+        state.job_criteria.soft_skills,
+        state.job_criteria.culture
+    ]
+    # most relevant set of components
+    most_relevant = all_criteria[np.argmax(state.job_criteria.weights)]
+    # select top candidates
+    scores_df = read_csv(
+        filepath_or_buffer = os.path.join(state.scores_folder, "scores.csv"),
+        index_col = "candidate_id"
+    )
+    # subset the top three candidates and their scores on the most relevant criteria components
+    scores_df = scores_df.sort_values(by = 'overall_refined', ascending = False)[most_relevant].head(3)
+    # candidate id and scores for the relevant components
+    top_candidates = {
+        i : scores_df.loc[i, most_relevant].values.reshape(-1,).tolist() for i in scores_df.index
+    }
+    # scoring combinations
+    candidate_combinations = list(combinations(top_candidates.keys(), 2))
+    # iterating over the comparisons
+    for index, pair in enumerate(candidate_combinations):
+        id_a, id_b = pair
+        # constrain the response from the LLM
+        llm_constrained = llm.with_structured_output(schema = GroupRationales)
+        rationale_chain = rationale_prompt | llm_constrained
+        msg = rationale_chain.invoke({
+            "criteria_elements" : ', '.join(most_relevant),
+            "candidate_1_id" : id_a,
+            "candidate_1_scores" : ', '.join([f"{k}: {v}" for k, v in zip(most_relevant, top_candidates[id_a])]),
+            "candidate_1_resume" : state.candidates_dict[id_a],
+            "candidate_2_id" : id_b,
+            "candidate_2_scores" : ', '.join([f"{k}: {v}" for k, v in zip(most_relevant, top_candidates[id_b])]),
+            "candidate_2_resume" : state.candidates_dict[id_b]
+        }).model_dump()
+        
+        temp_file_path = os.path.join(state.scores_folder, f"candidate_explanation_{index + 1}.json")
+        with open(temp_file_path, mode = "w") as json_file:
+            dump(
+                obj = msg,
+                fp = json_file,
+                indent = 4
+            )
+    return state
+             
 ### routing nodes
 # a. evaluation routing
 @print_execution_status

@@ -131,17 +131,31 @@ def auxiliary_col_calutation(
     - If all values in the specified columns are NaN for a row, the weighted average will be set to NaN.
     - The function does not modify the original DataFrame; it operates on a copy.
     """
-    # create a copy of the dataframe
+     # create a copy of the dataframe
     df_copy = df.copy()
+    
+    # Filter columns to only include those that exist in the DataFrame
+    existing_columns = [col for col in columns if col in df_copy.columns]
+    missing_columns = [col for col in columns if col not in df_copy.columns]
+    
+    if missing_columns:
+        print(f"Warning: Missing columns for {output_col_name}: {missing_columns}")
+        # If no columns exist, return the dataframe as is
+        if not existing_columns:
+            return df_copy
+    
+    # Use only existing columns for calculations
+    columns_to_use = existing_columns
+    
     # counts the number of na values for each row over a set of columns
-    df_copy[f"{output_col_name}_na_count"] = df_copy[columns].isna().sum(axis = 1)
+    df_copy[f"{output_col_name}_na_count"] = df_copy[columns_to_use].isna().sum(axis = 1)
     # adds the rows of a subset of columns if the values are not na
-    df_copy[f"{output_col_name}_sum"] = df_copy[columns].sum(axis = 1, skipna = True)
+    df_copy[f"{output_col_name}_sum"] = df_copy[columns_to_use].sum(axis = 1, skipna = True)
     # calculates the weighted average of the subset of columns for the non-na values
     df_copy[f"{output_col_name}_average"] = np.where(
-        df_copy[f"{output_col_name}_na_count"] == len(columns), # in case all the columns are nan
+        df_copy[f"{output_col_name}_na_count"] == len(columns_to_use), # in case all the columns are nan
         np.nan, # if all the nan then the result should be nan
-        df_copy[f"{output_col_name}_sum"] * (weight / (len(columns) - df_copy[f"{output_col_name}_na_count"]))  
+        df_copy[f"{output_col_name}_sum"] * (weight / (len(columns_to_use) - df_copy[f"{output_col_name}_na_count"]))  
     )
     # some of the axiliary columns can be dropped after the calculation
     df_copy.drop(columns = [f"{output_col_name}_na_count", f"{output_col_name}_sum"], inplace = True)

@@ -149,3 +149,23 @@ exp_extraction_template = [
     )
 ]
 exp_extraction_prompt = ChatPromptTemplate.from_messages(messages = exp_extraction_template)
+
+# scores rationale prompt
+rationale_template = [
+    (
+        "system",
+        "You are a talent acquisition analyst. Your task is to provide a brief rationale for the scores given to each candidate "
+        "within a specific group of evaluation criteria. The rationale should be a concise summary of why "
+        "each candidate received their specific score, drawing direct evidence from their resume to justify their ranking "
+        "relative to the others in the same group."
+    ),
+    (
+        "human",
+        "Provide a comparative rationale for each candidate in the following group for the '{criteria_elements}' evaluation components."
+        "\n\nThe scores of the candidate '{candidate_1_id}' are: {candidate_1_scores}\n"
+        "The candidate resume is the following:\n{candidate_1_resume}\n\n"
+        "\n\nThe scores of the candidate '{candidate_2_id}' are: {candidate_2_scores}\n"
+        "The candidate resume is the following:\n{candidate_2_resume}\n\n"
+    )
+]
+rationale_prompt = ChatPromptTemplate.from_messages(messages = rationale_template)

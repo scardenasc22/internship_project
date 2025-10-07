@@ -107,6 +107,15 @@ class CandidateExperience(BaseModel):
     """The structured extraction of a candidate's professional experience."""
     experience: List[JobExperience] = Field(..., description="A list of all professional experiences listed on the resume.")
 
+class CandidateRationale(BaseModel):
+    """The rationale for a single candidate's score."""
+    candidate_id: str = Field(..., description="The unique ID of the candidate.")
+    rationale: List[str] = Field(..., description="A concise explanation of the candidate's score in the specified criterion, in comparison to other candidates in the group.")
+
+class GroupRationales(BaseModel):
+    """A list of rationales for a group of candidates."""
+    rationales: List[CandidateRationale] = Field(..., description="A list of rationales for each candidate in the group.")
+
 
 class WorkflowState(BaseModel):
     """information that will flow through the graph"""
@@ -128,3 +137,5 @@ class WorkflowState(BaseModel):
     scores_folder : str 
     # dictionary with candidate experience
     candidates_exp : Optional[Dict] = None
+    # candidates names dictionary id : name pairs (edited files)
+    candidates_names : Optional[Dict] = None
