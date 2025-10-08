@@ -4,6 +4,7 @@ import pandas as pd
 import numpy as np
 from typing import Dict, Any
 from timeit import default_timer
+from schemas import CandidateExperience
 
 def text_extraction(
     file_path : str
@@ -61,7 +62,7 @@ def execution_time(func):
     return wrapper
 
 
-def scores_to_dataframe(candidates_scores: Dict[str, Dict[str, int]], n_groups: int) -> pd.DataFrame:
+def scores_to_dataframe(candidates_scores: Dict[str, Dict[str, int]]) -> pd.DataFrame:
     """
     Converts a nested dictionary of candidate scores into a pandas DataFrame and
     randomly assigns candidates to groups of approximately equal size.
@@ -71,7 +72,7 @@ def scores_to_dataframe(candidates_scores: Dict[str, Dict[str, int]], n_groups: 
         n_groups: The desired number of groups to create.
         
     Returns:
-        A pandas DataFrame with scores and a new 'group_id' column.
+        A pandas DataFrame
     """
     if not candidates_scores:
         return pd.DataFrame()
@@ -84,22 +85,7 @@ def scores_to_dataframe(candidates_scores: Dict[str, Dict[str, int]], n_groups: 
 
     df = pd.DataFrame(data_list)
     
-    # Randomly assign candidates to groups
-    num_candidates = len(df)
-    group_ids = np.repeat(np.arange(n_groups), num_candidates // n_groups)
-    
-    # Handle the remainder of candidates by adding them to the end
-    remainder = num_candidates % n_groups
-    group_ids = np.concatenate([group_ids, np.arange(remainder)])
-    
-    # Shuffle the group IDs to ensure random assignment
-    np.random.shuffle(group_ids)
-    
-    # Assign the shuffled group IDs to the DataFrame
-    df['group_id'] = group_ids
-    
-    # Set the group_id as index as well 
-    df.set_index(keys = ['candidate_id', 'group_id'], inplace = True)
+    df.set_index(keys = ['candidate_id'], inplace = True)
     
     return df
 
@@ -206,3 +192,32 @@ def refined_overall_calculation(
     )
     df_copy.drop(columns = [f"{output_col_name}_na_count", f"{output_col_name}_sum"], inplace = True)
     return df_copy
+
+def format_experience_for_prompt(candidate_exp) -> str:
+    lines = []
+    
+    # Handle both dict and CandidateExperience objects
+    if isinstance(candidate_exp, dict):
+        experience_list = candidate_exp.get('experience', [])
+    else:
+        experience_list = candidate_exp.experience
+    
+    for i, job in enumerate(experience_list, start=1):
+        if isinstance(job, dict):
+            job_title = job.get('job_title', '')
+            company_name = job.get('company_name', '')
+            years = job.get('years_of_experience', '')
+            responsibilities = job.get('responsibilities', [])
+        else:
+            job_title = job.job_title
+            company_name = job.company_name
+            years = job.years_of_experience
+            responsibilities = job.responsibilities
+            
+        lines.append(f"{i}. Job Title: {job_title}")
+        lines.append(f"   Company: {company_name}")
+        lines.append(f"   Duration: {years}")
+        lines.append(f"   Responsibilities:")
+        for r in responsibilities:
+            lines.append(f"     - {r}")
+    return "\n".join(lines)

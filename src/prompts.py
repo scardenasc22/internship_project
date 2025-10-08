@@ -15,7 +15,7 @@ criteria_template = [
     (
         "human",
         "Please provide a JSON object with the following keys. "
-        "The first 4 values of the keys should be a concise list of 5 strings. "
+        "The first 4 values of the keys should be a concise list of 3 strings. " # from 5 to 3 components per criteria
         "The 'weights' key should be a list of weights of the previous 4 keys "
         "relevant to the job description provided.\n\n"
         "- **domains**: Key subject areas or industries relevant to the role.\n"
@@ -43,7 +43,7 @@ criteria_with_feedback_template = [
     (
         "human",
         "Please provide a JSON object with the following keys. "
-        "The first 4 values of the keys should be a concise list of 5 strings. "
+        "The first 4 values of the keys should be a concise list of 3 strings. " # from 5 to 3 components per criteria
         "The 'weights' key should be a list of weights of the previous 4 keys "
         "relevant to the job description provided.\n\n"
         "- **domains**: Key subject areas or industries relevant to the role.\n"
@@ -113,19 +113,20 @@ interview_questions_template = [
     (
         "system",
         (
-            "You are an expert recruiter. Your task is to analyze a candidate's resume and a job description to "
-            "generate a set of interview questions. Your output must be a list of questions and the name of the candidate."
+            "You are an expert recruiter. Your task is to analyze a candidate's experience and job description to "
+            "generate a set of interview questions. Your output must be a list of questions."
         ),
     ),
     (
         "human",
         (
             "Please provide a JSON object with the following keys.\n"
-            "- **Name**: <Name of the candidate>"
-            "- **Experience questions**: <List of 4 questions aimed to clarify or expand upon the candidate's professional experience, skills, and achievements. These questions should help assess the candidate's expertise and past job performance.>\n"
-            "- **Situational questions**: <List of 4 questions aimed to understand the candidate's behavior, problem-solving abilities, and soft skills in relation to the target role. These questions should explore how the candidate handles specific situations and challenges.>\n"
+            "- **Experience questions**: <List of 4 questions aimed to clarify or expand upon the candidate's professional experience, "
+            "skills, and achievements. These questions should help assess the candidate's expertise and past job performance.>\n"
+            "- **Situational questions**: <List of 4 questions aimed to understand the candidate's behavior, problem-solving abilities, "
+            "and soft skills in relation to the target role. These questions should explore how the candidate handles specific situations and challenges.>\n"
             "\n\n**Job Description:**\n{job_description}"
-            "\n\n**Candidate Resume:**\n{candidate_resume}"
+            "\n\n**Candidate Experience:**\n{candidate_experience}"
         )
     )
 ]
@@ -169,3 +170,25 @@ rationale_template = [
     )
 ]
 rationale_prompt = ChatPromptTemplate.from_messages(messages = rationale_template)
+
+# tournament selection prompt
+selection_prompt = ChatPromptTemplate.from_messages([
+    (
+        "system",
+        (
+            "You are an expert recruiter conducting a tournament selection round. "
+            "Analyze the provided resumes and select the ONE to TWO best candidates who are most qualified based **ONLY** on the required skills listed below. "
+            "For each winner, you MUST provide a concise justification (1-2 sentences) that highlights the most relevant skills/experience "
+            "from their resume compared to the other candidates in the group. Your output must strictly follow the required JSON schema."
+        ),
+    ),
+    (
+        "human",
+        (
+            "Based on the **REQUIRED EVALUATION CRITERIA** provided, select the best 1 or 2 winners "
+            "from the candidates with the following IDs: {all_candidate_ids}."
+            "\n\n**REQUIRED EVALUATION CRITERIA:**\n{combined_criteria_list}"
+            "\n\n**Candidate Resumes:**\n{group_resumes}"
+        ),
+    ),
+])

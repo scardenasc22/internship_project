@@ -42,3 +42,10 @@
 * change the IDs from the table (DONE)
 * added name to the csv file (DONE)
 * add explanations of the scores (DONE)
+* integrate the hybrid approach:
+1. generate a reduced list of components for the evaluation criteria
+2. tournament selection for the complete pool of candidates
+3. scores only for the best candidates
+4. experience only for the top candidates
+5. interview questions based on the experience only
+* export the rationale of the rounds for the tournament

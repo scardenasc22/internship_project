@@ -1,3 +1,4 @@
+import stat
 from schemas import (
     Refinement, 
     WorkflowState, 
@@ -6,7 +7,8 @@ from schemas import (
     EvaluationScores,
     InterviewQuestions,
     CandidateExperience,
-    GroupRationales
+    GroupRationales,
+    GroupWinners
 )
 from functions import (
     print_execution_status,
@@ -14,7 +16,8 @@ from functions import (
     scores_to_dataframe,
     auxiliary_col_calutation,
     refined_overall_calculation,
-    execution_time
+    execution_time,
+    format_experience_for_prompt
 )
 from dotenv import load_dotenv
 from langchain_openai import ChatOpenAI
@@ -27,7 +30,8 @@ from prompts import (
     scoring_prompt,
     interview_questions_prompt,
     exp_extraction_prompt,
-    rationale_prompt
+    rationale_prompt,
+    selection_prompt
 )
 from langchain_core.messages import HumanMessage, AIMessage
 from typing import Literal
@@ -36,13 +40,17 @@ from json import dump
 import os
 import numpy as np
 from itertools import combinations
+from collections import defaultdict
+from tqdm.auto import tqdm
+import random
+random.seed(2000)
 
 # loading environment variables
 load_dotenv()
 
 # one of the multiple LLMs that can be leveraged according to the task
 llm = ChatOpenAI(
-    model = "gpt-4o-mini-2024-07-18"
+    model = "gpt-4o-2024-08-06"
 )
 # tools to search information on the web
 web_search = TavilySearch(
@@ -204,11 +212,97 @@ def get_candidates_info(state : WorkflowState) -> WorkflowState:
         raise Exception(f"Error while populating candidates info: {e}")
     return state
 
+# 6. candidates tournament (improved version of the function score candidates)
+@execution_time
+@print_execution_status
+def candidates_tournament(state : WorkflowState) -> WorkflowState:
+    """selects the best candidates by comparing random groups of candidates"""
+    candidates_to_evaluate = state.candidates_dict
+    llm_selector = llm.with_structured_output(schema = GroupWinners)
+    selection_chain = selection_prompt | llm_selector
+    all_criteria = "\n- ".join(
+        state.job_criteria.domains + 
+        state.job_criteria.technical_skills + 
+        state.job_criteria.soft_skills + 
+        state.job_criteria.culture
+    )
+    initial_groups = defaultdict(dict)
+    round_number = 0
+    # state.round_summaries = {}
+    # state.round_rationale = {}
+    round_summaries = defaultdict(dict)
+    round_rationale = defaultdict(dict)
+    while len(candidates_to_evaluate) > 3: # hardcoded number of top candidates
+        candidate_ids = list(candidates_to_evaluate.keys())
+        random.shuffle(candidate_ids)
+        winner_of_round = {}
+        groups = [
+            candidate_ids[i : i + state.batches] for i in range(0, len(candidate_ids) + 1, state.batches)
+        ]
+        for group_index, group_ids in tqdm(enumerate(groups)):
+            # store the initial groups of the candidates
+            if round_number == 0:
+                initial_groups[group_index] = group_ids
+            # string for the cvs in the group
+            group_resumes_string = '\n---\n'.join([
+                f"Candidate ID: {cid}\nResume: {state.candidates_dict[cid]}" for cid in group_ids
+            ])
+            try:
+                selection_obj = selection_chain.invoke({
+                    "all_candidate_ids" : ", ".join(group_ids),
+                    "combined_criteria_list" : all_criteria,
+                    "group_resumes" : group_resumes_string
+                })
+                # this object has two attributes: selected_winners and overall_summary
+                # overall_summary is the overall explanation of the winners in the gruop
+                # selected_winners is a list of candidate_id, justification
+                # state.round_summaries.setdefault(round_number, {})
+                summary = getattr(selection_obj, "overall_summary", "")
+                round_summaries[round_number][group_index] = summary 
+                # state.round_summaries[round_number][group_index] = selection_obj.overall_summary
+                for winner_data in selection_obj.selected_winners:
+                    # storing the results
+                    winner_id = winner_data.candidate_id
+                    # state.round_rationale.setdefault(round_number, {})
+                    round_rationale[round_number][winner_id] = winner_data.justification
+                    # append the winner of round
+                    winner_of_round[winner_id] = candidates_to_evaluate[winner_id]
+                    
+            except Exception as e:
+                print(f"Error evaluating group {group_index + 1}: {e}")
+                # fall-back: if there is an error on the evaluation then the first candidate is selected
+                if group_ids:
+                    winner_of_round[group_ids[0]] = candidates_to_evaluate[group_ids[0]]
+        round_number += 1
+        candidates_to_evaluate = winner_of_round
+        print(f"Round finished. {len(candidates_to_evaluate)} candidates were promoted")
+    # store the results from initial groups
+    initial_groups_lookup = {
+        cid : k for k, v in initial_groups.items() for cid in v # dictionary with ids : initial group values
+    }
+    state.round_rationale = round_rationale
+    state.round_summaries = round_summaries
+    state.initial_groups = initial_groups_lookup
+    state.top_candidates = candidates_to_evaluate
+    # export the rationales
+    dump(
+        obj = state.round_rationale,
+        fp = open(os.path.join(state.scores_folder, "tournament_rationales.json"), mode = "w"),
+        indent = 4
+    )
+    dump(
+        obj = state.round_summaries,
+        fp = open(os.path.join(state.scores_folder, "round_summaries.json"), mode = "w"),
+        indent = 4
+    )
+    
+    return state
+    
 # 6. ranking candidates
 @execution_time
 @print_execution_status
 def score_candidates(state : WorkflowState) -> WorkflowState:
-    """Evaluate the candidates on the provided criteria"""
+    """evaluate the top candidates from the tournament on the provided criteria"""
     llm_for_scores = llm.with_structured_output(schema = EvaluationScores)
     scoring_chain = scoring_prompt | llm_for_scores
     
@@ -220,14 +314,12 @@ def score_candidates(state : WorkflowState) -> WorkflowState:
         criteria.soft_skills + 
         criteria.culture
     )
-    # sanity check
-    assert len(all_criteria) == 20 # 4 components x 5 elements = 20
 
     # Initialize a temporary dictionary to hold all scores
     all_candidates_scores = {}
     
     # Scoring the candidates
-    for id, resume in state.candidates_dict.items():
+    for id, resume in state.top_candidates.items(): # evaluate only the top candidates instead of the complete pool
         try:
             # Ask the llm to evaluate the candidate based on their resume
             scores_object = scoring_chain.invoke({
@@ -259,13 +351,13 @@ def score_candidates(state : WorkflowState) -> WorkflowState:
 def export_scores(state : WorkflowState) -> WorkflowState:
     """Exports candidate results with their corresponding batches"""
     scores_df = scores_to_dataframe(
-        candidates_scores = state.candidates_scores,
-        n_groups = state.batches
+        candidates_scores = state.candidates_scores
     )
     # add the names colum
     scores_df_reset = scores_df.reset_index()
     scores_df_reset['names'] = scores_df_reset['candidate_id'].map(state.candidates_names)
-    scores_df = scores_df_reset.set_index(['candidate_id', 'group_id'])
+    scores_df_reset['group_id'] = scores_df_reset['candidate_id'].map(state.initial_groups)
+    scores_df = scores_df_reset.set_index(['candidate_id'])
     # export to csv
     scores_df.to_csv(
         path_or_buf = os.path.join(state.scores_folder, "scores.csv"),
@@ -279,14 +371,8 @@ def calculate_overall_score(state : WorkflowState) -> WorkflowState:
     """calculate the overall score of the candidates"""
     scores_df = read_csv(
         filepath_or_buffer = os.path.join(state.scores_folder, "scores.csv"),
-        index_col = ["candidate_id", "group_id"]
+        index_col = ["candidate_id", "group_id", "names"]
     )
-    assert len(scores_df.columns) == len(
-        state.job_criteria.domains +
-        state.job_criteria.technical_skills + 
-        state.job_criteria.soft_skills + 
-        state.job_criteria.culture
-    ) + 1 # one means the 'names column'
     # print("Domains:", state.job_criteria.domains)
     # print("Technical skills:", state.job_criteria.technical_skills)
     # print("Soft skills:", state.job_criteria.soft_skills)
@@ -348,7 +434,7 @@ def extract_experience(state: WorkflowState) -> WorkflowState:
     all_candidates_exp = {}
     
     # Scoring the candidates
-    for id, resume in state.candidates_dict.items():
+    for id, resume in state.top_candidates.items():
         try:
             # Ask the llm to extract the candidate experience
             experience_object = extraction_chain.invoke({
@@ -377,89 +463,110 @@ def extract_experience(state: WorkflowState) -> WorkflowState:
 # 10. creating the intreview questions for the best candidates
 @print_execution_status
 def generate_questions(state : WorkflowState) -> WorkflowState:
-    """reads the scores from the candidates, extracts the top three and generate interview questions for those candidates"""
-    # reads the scores of the candidates
-    scores_df = read_csv(
-        filepath_or_buffer = os.path.join(state.scores_folder, "scores.csv"),
-        index_col = "candidate_id"
-    )
-    # ids of the best candidates, and the number of candidates can be filtered
-    best_candidates_ids = scores_df.sort_values(by = "overall_refined", ascending = False).head(3).index.to_list()
-    # candidates files
-    candidates_files = os.listdir(state.candidates_folder)
-    # files of the best candidates
-    best_candidates_paths = [
-        os.path.join(state.candidates_folder, f) for f in candidates_files if any(f.startswith(can_id) for can_id in best_candidates_ids)
-    ]
+    """generate interview questions for the top candidates based solely on their experience"""
     llm_constrained = llm.with_structured_output(schema = InterviewQuestions)
     questions_chain = interview_questions_prompt | llm_constrained
-    for path in best_candidates_paths:
-        # generate interview questions for a candidate
+    for cid, resume in state.top_candidates.items():
         msg = questions_chain.invoke({
             "job_description" : state.job_description,
-            "candidate_resume" : text_extraction(path)
-        }) # structured output
-        name = msg.name
-        # exporing to JSON file
-        temp_file_path = os.path.join(state.scores_folder, f"interview_questions_{name}.json")
-        with open(temp_file_path, mode = "w") as json_file:
-            dump(
-                obj = msg.dict(),
-                fp = json_file,
-                indent = 4
-            )
+            "candidate_experience" : format_experience_for_prompt(state.candidates_exp[cid])
+        })
+        tmp_dict = msg.model_dump()
+        tmp_dict['name'] = state.candidates_names[cid]
+        tmp_file_name = os.path.join(
+            state.scores_folder,
+            f"interview_questions_{state.candidates_names[cid]}.json"
+        )
+        dump(
+            obj = tmp_dict,
+            fp = open(tmp_file_name, mode = "w"),
+            indent = 4
+        )
     return state
+        
+    # # reads the scores of the candidates
+    # scores_df = read_csv(
+    #     filepath_or_buffer = os.path.join(state.scores_folder, "scores.csv"),
+    #     index_col = "candidate_id"
+    # )
+    # # ids of the best candidates, and the number of candidates can be filtered
+    # best_candidates_ids = scores_df.sort_values(by = "overall_refined", ascending = False).head(3).index.to_list()
+    # # candidates files
+    # candidates_files = os.listdir(state.candidates_folder)
+    # # files of the best candidates
+    # best_candidates_paths = [
+    #     os.path.join(state.candidates_folder, f) for f in candidates_files if any(f.startswith(can_id) for can_id in best_candidates_ids)
+    # ]
+    # llm_constrained = llm.with_structured_output(schema = InterviewQuestions)
+    # questions_chain = interview_questions_prompt | llm_constrained
+    # for path in best_candidates_paths:
+    #     # generate interview questions for a candidate
+    #     msg = questions_chain.invoke({
+    #         "job_description" : state.job_description,
+    #         "candidate_resume" : text_extraction(path)
+    #     }) # structured output
+    #     name = msg.name
+    #     # exporing to JSON file
+    #     temp_file_path = os.path.join(state.scores_folder, f"interview_questions_{name}.json")
+    #     with open(temp_file_path, mode = "w") as json_file:
+    #         dump(
+    #             obj = msg.dict(),
+    #             fp = json_file,
+    #             indent = 4
+    #         )
+    # return state
 
 # 11. scores rationale for the top candidates
-@print_execution_status
-def generate_explanations(state : WorkflowState) -> WorkflowState:
-    """generate the explantions for the top candidates by comparing their resume and their scores in the most relevant criteria"""
-    # list of list of criteria components
-    all_criteria = [
-        state.job_criteria.domains,
-        state.job_criteria.technical_skills,
-        state.job_criteria.soft_skills,
-        state.job_criteria.culture
-    ]
-    # most relevant set of components
-    most_relevant = all_criteria[np.argmax(state.job_criteria.weights)]
-    # select top candidates
-    scores_df = read_csv(
-        filepath_or_buffer = os.path.join(state.scores_folder, "scores.csv"),
-        index_col = "candidate_id"
-    )
-    # subset the top three candidates and their scores on the most relevant criteria components
-    scores_df = scores_df.sort_values(by = 'overall_refined', ascending = False)[most_relevant].head(3)
-    # candidate id and scores for the relevant components
-    top_candidates = {
-        i : scores_df.loc[i, most_relevant].values.reshape(-1,).tolist() for i in scores_df.index
-    }
-    # scoring combinations
-    candidate_combinations = list(combinations(top_candidates.keys(), 2))
-    # iterating over the comparisons
-    for index, pair in enumerate(candidate_combinations):
-        id_a, id_b = pair
-        # constrain the response from the LLM
-        llm_constrained = llm.with_structured_output(schema = GroupRationales)
-        rationale_chain = rationale_prompt | llm_constrained
-        msg = rationale_chain.invoke({
-            "criteria_elements" : ', '.join(most_relevant),
-            "candidate_1_id" : id_a,
-            "candidate_1_scores" : ', '.join([f"{k}: {v}" for k, v in zip(most_relevant, top_candidates[id_a])]),
-            "candidate_1_resume" : state.candidates_dict[id_a],
-            "candidate_2_id" : id_b,
-            "candidate_2_scores" : ', '.join([f"{k}: {v}" for k, v in zip(most_relevant, top_candidates[id_b])]),
-            "candidate_2_resume" : state.candidates_dict[id_b]
-        }).model_dump()
+# there is no need to implement this function considering that the big explanations were given in the tournament
+# @print_execution_status
+# def generate_explanations(state : WorkflowState) -> WorkflowState:
+#     """generate the explantions for the top candidates by comparing their resume and their scores in the most relevant criteria"""
+#     # list of list of criteria components
+#     all_criteria = [
+#         state.job_criteria.domains,
+#         state.job_criteria.technical_skills,
+#         state.job_criteria.soft_skills,
+#         state.job_criteria.culture
+#     ]
+#     # most relevant set of components
+#     most_relevant = all_criteria[np.argmax(state.job_criteria.weights)]
+#     # select top candidates
+#     scores_df = read_csv(
+#         filepath_or_buffer = os.path.join(state.scores_folder, "scores.csv"),
+#         index_col = "candidate_id"
+#     )
+#     # subset the top three candidates and their scores on the most relevant criteria components
+#     scores_df = scores_df.sort_values(by = 'overall_refined', ascending = False)[most_relevant].head(3)
+#     # candidate id and scores for the relevant components
+#     top_candidates = {
+#         i : scores_df.loc[i, most_relevant].values.reshape(-1,).tolist() for i in scores_df.index
+#     }
+#     # scoring combinations
+#     candidate_combinations = list(combinations(top_candidates.keys(), 2))
+#     # iterating over the comparisons
+#     for index, pair in enumerate(candidate_combinations):
+#         id_a, id_b = pair
+#         # constrain the response from the LLM
+#         llm_constrained = llm.with_structured_output(schema = GroupRationales)
+#         rationale_chain = rationale_prompt | llm_constrained
+#         msg = rationale_chain.invoke({
+#             "criteria_elements" : ', '.join(most_relevant),
+#             "candidate_1_id" : id_a,
+#             "candidate_1_scores" : ', '.join([f"{k}: {v}" for k, v in zip(most_relevant, top_candidates[id_a])]),
+#             "candidate_1_resume" : state.candidates_dict[id_a],
+#             "candidate_2_id" : id_b,
+#             "candidate_2_scores" : ', '.join([f"{k}: {v}" for k, v in zip(most_relevant, top_candidates[id_b])]),
+#             "candidate_2_resume" : state.candidates_dict[id_b]
+#         }).model_dump()
         
-        temp_file_path = os.path.join(state.scores_folder, f"candidate_explanation_{index + 1}.json")
-        with open(temp_file_path, mode = "w") as json_file:
-            dump(
-                obj = msg,
-                fp = json_file,
-                indent = 4
-            )
-    return state
+#         temp_file_path = os.path.join(state.scores_folder, f"candidate_explanation_{index + 1}.json")
+#         with open(temp_file_path, mode = "w") as json_file:
+#             dump(
+#                 obj = msg,
+#                 fp = json_file,
+#                 indent = 4
+#             )
+#     return state
              
 ### routing nodes
 # a. evaluation routing

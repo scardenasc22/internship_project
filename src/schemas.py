@@ -79,9 +79,9 @@ class CompanyDetails(BaseModel):
 
 class InterviewQuestions(BaseModel):
     """generation of interview questions"""
-    name : str = Field(
-        description = "Name of the candidate"
-    )
+    # name : str = Field(
+    #     description = "Name of the candidate"
+    # )
     experience_questions : List[str] = Field(
         description = "List of questions aimed to clarify or expand upon the candidate's professional experience"
     )
@@ -116,6 +116,17 @@ class GroupRationales(BaseModel):
     """A list of rationales for a group of candidates."""
     rationales: List[CandidateRationale] = Field(..., description="A list of rationales for each candidate in the group.")
 
+class WinnerRationale(BaseModel):
+    """Details for a single selected candidate."""
+    candidate_id: str = Field(..., description="The unique ID of the selected winner.")
+    justification: str = Field(..., description="A 1-2 sentence explanation citing specific evidence from the resume that qualifies this candidate over the others.")
+
+class GroupWinners(BaseModel):
+    """The structured output containing all selected winners and their rationale."""
+    selected_winners: List[WinnerRationale] = Field(..., description="A list of 1 or 2 candidates selected as the best in the group, each with a justification.")
+    # You can also add a field for an overall comparison summary if helpful
+    overall_summary: str = Field(..., description="A brief summary of the key difference between the winners and the rest of the group.")
+
 
 class WorkflowState(BaseModel):
     """information that will flow through the graph"""
@@ -139,3 +150,11 @@ class WorkflowState(BaseModel):
     candidates_exp : Optional[Dict] = None
     # candidates names dictionary id : name pairs (edited files)
     candidates_names : Optional[Dict] = None
+    # selection rationale during the tournament
+    round_rationale : Optional[Dict] = {}
+    # overall rationale per round
+    round_summaries : Optional[Dict] = {}
+    # initial groups dictionary
+    initial_groups : Optional[Dict] = {}
+    # candidate tournament winners
+    top_candidates : Optional[Dict] = {}
