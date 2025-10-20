@@ -48,4 +48,10 @@
 3. scores only for the best candidates
 4. experience only for the top candidates
 5. interview questions based on the experience only
-* export the rationale of the rounds for the tournament
+* export the rationale of the rounds for the tournament (DONE)
+
+-- 20251014 improvements upon the current workflow:
+* teams of specialist in each criteria component for the candidate tournament (Not priority)
+* add a supervisor agent for the full workflow (Not priority)
+* reduce to 10% of the total candidtes (needs to change in worflow)
+* force the names or ids on the explantions per round (include that name medatada con the prompt)
