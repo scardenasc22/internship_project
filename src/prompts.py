@@ -177,9 +177,10 @@ selection_prompt = ChatPromptTemplate.from_messages([
         "system",
         (
             "You are an expert recruiter conducting a tournament selection round. "
-            "Analyze the provided resumes and select the ONE to TWO best candidates who are most qualified based **ONLY** on the required skills listed below. "
+            "Analyze the provided resumes and select the TWO best candidates who are most qualified based **ONLY** on the required skills listed below. "
             "For each winner, you MUST provide a concise justification (1-2 sentences) that highlights the most relevant skills/experience "
-            "from their resume compared to the other candidates in the group. Your output must strictly follow the required JSON schema."
+            "from their resume compared to the other candidates in the group. **Include the candidate's name in your justification when available.** "
+            "Your output must strictly follow the required JSON schema."
         ),
     ),
     (

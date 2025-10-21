@@ -1,4 +1,4 @@
-import stat
+from math import ceil
 from schemas import (
     Refinement, 
     WorkflowState, 
@@ -232,20 +232,30 @@ def candidates_tournament(state : WorkflowState) -> WorkflowState:
     # state.round_rationale = {}
     round_summaries = defaultdict(dict)
     round_rationale = defaultdict(dict)
-    while len(candidates_to_evaluate) > 3: # hardcoded number of top candidates
+    # the loop ends with 10% of the candidates
+    limit = ceil(len(state.candidates_dict.keys()) * 0.1)
+    while len(candidates_to_evaluate) > limit + 1: 
         candidate_ids = list(candidates_to_evaluate.keys())
         random.shuffle(candidate_ids)
         winner_of_round = {}
         groups = [
             candidate_ids[i : i + state.batches] for i in range(0, len(candidate_ids) + 1, state.batches)
         ]
+        for group_index, group in enumerate(groups):
+            if len(group) != state.batches:
+                groups[group_index - 1] += group
+                groups = groups[:-1]
+                half = len(groups[-1]) // 2
+                first_half, second_half = groups[-1][:half], groups[-1][half:]
+                groups[-1] = first_half
+                groups.append(second_half)
         for group_index, group_ids in tqdm(enumerate(groups)):
             # store the initial groups of the candidates
             if round_number == 0:
                 initial_groups[group_index] = group_ids
             # string for the cvs in the group
             group_resumes_string = '\n---\n'.join([
-                f"Candidate ID: {cid}\nResume: {state.candidates_dict[cid]}" for cid in group_ids
+                f"Candidate ID: {cid}\nName: {state.candidates_names.get(cid, 'Unknown')}\nResume: {state.candidates_dict[cid]}" for cid in group_ids
             ])
             try:
                 selection_obj = selection_chain.invoke({
