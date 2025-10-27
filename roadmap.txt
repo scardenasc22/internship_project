@@ -55,3 +55,9 @@
 * add a supervisor agent for the full workflow (Not priority)
 * reduce to 10% of the total candidtes (needs to change in worflow)
 * force the names or ids on the explantions per round (include that name medatada con the prompt)
+
+
+-- what should we look for on every answer?
+-- strenghts and weakness summary
+-- refine technical questions
+-- results from different models
