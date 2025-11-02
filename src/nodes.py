@@ -262,7 +262,7 @@ def candidates_tournament(state : WorkflowState) -> WorkflowState:
     round_summaries = defaultdict(dict)
     round_rationale = defaultdict(dict)
     for round in range(state.number_of_rounds):
-        candidates_ids = candidates_to_evaluate.keys()
+        candidates_ids = list(candidates_to_evaluate.keys())
         random.shuffle(candidates_ids)
         # the batches are full of ids of the candidates
         batches = [
@@ -288,7 +288,7 @@ def candidates_tournament(state : WorkflowState) -> WorkflowState:
                 })
                 summary = getattr(selection_obj, "overall_summary", "")
                 # storing the rationale of the batch selection
-                round_summaries[round][batch] = summary 
+                round_summaries[round][batch_index] = summary 
                 for winner_data in selection_obj.selected_winners:
                     # storing the results
                     winner_id = winner_data.candidate_id
