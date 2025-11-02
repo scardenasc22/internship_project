@@ -113,22 +113,33 @@ interview_questions_template = [
     (
         "system",
         (
-            "You are an expert recruiter. Your task is to analyze a candidate's experience and job description to "
-            "generate a set of interview questions. Your output must be a list of questions."
+            "You are an expert recruiter. Analyze the candidate's experience and the job description to "
+            "produce interview questions and what to look for in responses. "
+            "Return content that can be cleanly mapped into the enforced schema: each item has exactly two fields: "
+            "'question' and 'look_for'. Do not include any other fields or commentary."
         ),
     ),
     (
         "human",
         (
-            "Please provide a JSON object with the following keys.\n"
-            "- **Experience questions**: <List of 4 questions aimed to clarify or expand upon the candidate's professional experience, "
-            "skills, and achievements. These questions should help assess the candidate's expertise and past job performance.>\n"
-            "- **Situational questions**: <List of 4 questions aimed to understand the candidate's behavior, problem-solving abilities, "
-            "and soft skills in relation to the target role. These questions should explore how the candidate handles specific situations and challenges.>\n"
-            "\n\n**Job Description:**\n{job_description}"
-            "\n\n**Candidate Experience:**\n{candidate_experience}"
-        )
-    )
+            "Generate exactly 4 experience questions, 4 situational questions, and 4 technical questions. "
+            "Each item must include what to look for.\n\n"
+            "Constraints:\n"
+            "- Questions must be open-ended, specific, and grounded in the Job Description and Candidate Experience.\n"
+            "- Avoid yes/no questions and avoid leading the candidate to a specific answer.\n"
+            "- Do not invent details not present in the inputs; no placeholders or boilerplate.\n"
+            "- No duplication within or across categories; each question should target a distinct skill/topic.\n"
+            "- Keep 'look_for' concise (1-2 sentences), focusing on observable indicators, relevant metrics/examples, and common red flags.\n"
+            "- Exclude illegal, discriminatory, or irrelevant topics.\n\n"
+            "Category intents:\n"
+            "- Experience Questions: Clarify or expand on the candidate's prior work, decisions, and outcomes.\n"
+            "- Situational Questions: Elicit behavior, problem-solving, communication, and stakeholder management.\n"
+            "- Technical Questions: Assess tools, architectures, practices, and trade-offs relevant to the role.\n\n"
+            "Return only content that fits the schema fields ('question', 'look_for') for each item.\n\n"
+            "**Job Description:**\n{job_description}\n\n"
+            "**Candidate Experience:**\n{candidate_experience}"
+        ),
+    ),
 ]
 interview_questions_prompt = ChatPromptTemplate.from_messages(messages = interview_questions_template)
 
@@ -177,7 +188,7 @@ selection_prompt = ChatPromptTemplate.from_messages([
         "system",
         (
             "You are an expert recruiter conducting a tournament selection round. "
-            "Analyze the provided resumes and select the TWO best candidates who are most qualified based **ONLY** on the required skills listed below. "
+            "Analyze the provided resumes and select the {number_of_candidates_to_select} best candidates who are most qualified based **ONLY** on the required skills listed below. "
             "For each winner, you MUST provide a concise justification (1-2 sentences) that highlights the most relevant skills/experience "
             "from their resume compared to the other candidates in the group. **Include the candidate's name in your justification when available.** "
             "Your output must strictly follow the required JSON schema."
@@ -186,7 +197,7 @@ selection_prompt = ChatPromptTemplate.from_messages([
     (
         "human",
         (
-            "Based on the **REQUIRED EVALUATION CRITERIA** provided, select the best 1 or 2 winners "
+            "Based on the **REQUIRED EVALUATION CRITERIA** provided, select the best {number_of_candidates_to_select} winners "
             "from the candidates with the following IDs: {all_candidate_ids}."
             "\n\n**REQUIRED EVALUATION CRITERIA:**\n{combined_criteria_list}"
             "\n\n**Candidate Resumes:**\n{group_resumes}"

@@ -17,7 +17,8 @@ from functions import (
     auxiliary_col_calutation,
     refined_overall_calculation,
     execution_time,
-    format_experience_for_prompt
+    format_experience_for_prompt,
+    candidate_simulation
 )
 from dotenv import load_dotenv
 from langchain_openai import ChatOpenAI
@@ -34,7 +35,7 @@ from prompts import (
     selection_prompt
 )
 from langchain_core.messages import HumanMessage, AIMessage
-from typing import Literal
+from typing import Any, Literal
 from pandas import read_csv
 from json import dump
 import os
@@ -212,80 +213,97 @@ def get_candidates_info(state : WorkflowState) -> WorkflowState:
         raise Exception(f"Error while populating candidates info: {e}")
     return state
 
-# 6. candidates tournament (improved version of the function score candidates)
+# 6. candidates tournament simulation
+def tournament_simulation(state : WorkflowState) -> WorkflowState:
+    """asks for user feedback about the parameters of the tournament and how many rounds to run"""
+    population = len(state.candidates_dict.keys())
+    parameters_approval = False
+    while not parameters_approval:
+        print(f"The tournament conditions are:")
+        print(f"- population: {population}")
+        print(f"- batch size: {state.batch_size}")
+        print(f"- selection per batch: {state.batch_size}")
+        print('-'*30)
+        candidate_simulation(
+            population = population,
+            batch_size = state.batch_size,
+            selected_per_batch = state.selected_per_batch
+        )
+        parameters_feedback = input("Do you approve this parameters?")
+        if parameters_feedback.lower() in ['yes', 'y']:
+            suggested_rounds = input("how many rounds do you wish to run?")
+            state.number_of_rounds = int(suggested_rounds)
+            parameters_approval = True
+        else:
+            print("Modify the parameters of the tournament")
+            suggested_batch_size = input("What batch size do you wish to use?")
+            suggested_selection_per_batch = input("How many candidates do you whish to select per batch?")
+            state.batch_size = int(suggested_batch_size)
+            state.selected_per_batch = int(suggested_selection_per_batch)
+    return state
+        
+# 7. candidates tournament (improved version of the function score candidates)
 @execution_time
 @print_execution_status
 def candidates_tournament(state : WorkflowState) -> WorkflowState:
     """selects the best candidates by comparing random groups of candidates"""
-    candidates_to_evaluate = state.candidates_dict
+    # dictionary with the candidates 'id', 'resume' pairs
+    candidates_to_evaluate = state.candidates_dict.copy()
     llm_selector = llm.with_structured_output(schema = GroupWinners)
     selection_chain = selection_prompt | llm_selector
+    # full text of the criteria to evaluate candidates
     all_criteria = "\n- ".join(
-        state.job_criteria.domains + 
-        state.job_criteria.technical_skills + 
+        state.job_criteria.technical_skills +
+        state.job_criteria.domains +  
         state.job_criteria.soft_skills + 
         state.job_criteria.culture
     )
-    initial_groups = defaultdict(dict)
-    round_number = 0
-    # state.round_summaries = {}
-    # state.round_rationale = {}
+    initial_groups = defaultdict(list)
     round_summaries = defaultdict(dict)
     round_rationale = defaultdict(dict)
-    # the loop ends with 10% of the candidates
-    limit = ceil(len(state.candidates_dict.keys()) * 0.1)
-    while len(candidates_to_evaluate) > limit + 1: 
-        candidate_ids = list(candidates_to_evaluate.keys())
-        random.shuffle(candidate_ids)
-        winner_of_round = {}
-        groups = [
-            candidate_ids[i : i + state.batches] for i in range(0, len(candidate_ids) + 1, state.batches)
+    for round in range(state.number_of_rounds):
+        candidates_ids = candidates_to_evaluate.keys()
+        random.shuffle(candidates_ids)
+        # the batches are full of ids of the candidates
+        batches = [
+            candidates_ids[i : state.batch_size + i] for i in range(0, len(candidates_to_evaluate) + 1, state.batch_size)
         ]
-        for group_index, group in enumerate(groups):
-            if len(group) != state.batches:
-                groups[group_index - 1] += group
-                groups = groups[:-1]
-                half = len(groups[-1]) // 2
-                first_half, second_half = groups[-1][:half], groups[-1][half:]
-                groups[-1] = first_half
-                groups.append(second_half)
-        for group_index, group_ids in tqdm(enumerate(groups)):
-            # store the initial groups of the candidates
-            if round_number == 0:
-                initial_groups[group_index] = group_ids
-            # string for the cvs in the group
+        winner_of_round = defaultdict(dict)
+        for batch_index, batch in tqdm(enumerate(batches)):
+            if round == 0:
+                # store metadata about the initial group
+                initial_groups[batch_index] = batch
+            # string for the cvs in the groupx
             group_resumes_string = '\n---\n'.join([
-                f"Candidate ID: {cid}\nName: {state.candidates_names.get(cid, 'Unknown')}\nResume: {state.candidates_dict[cid]}" for cid in group_ids
+                f"Candidate ID: {cid}\nName: {state.candidates_names.get(cid, 'Unknown')}\nResume: {state.candidates_dict[cid]}" for cid in batch
             ])
+            # select only 1 candidate for batches with less candidates
+            k = min(state.selected_per_batch, max(1, len(batch) - 1))
             try:
-                selection_obj = selection_chain.invoke({
-                    "all_candidate_ids" : ", ".join(group_ids),
+                selection_obj = selection_chain.invoke(input = {
+                    "number_of_candidates_to_select" : k,
+                    "all_candidate_ids" : ", ".join(batch),
                     "combined_criteria_list" : all_criteria,
                     "group_resumes" : group_resumes_string
                 })
-                # this object has two attributes: selected_winners and overall_summary
-                # overall_summary is the overall explanation of the winners in the gruop
-                # selected_winners is a list of candidate_id, justification
-                # state.round_summaries.setdefault(round_number, {})
                 summary = getattr(selection_obj, "overall_summary", "")
-                round_summaries[round_number][group_index] = summary 
-                # state.round_summaries[round_number][group_index] = selection_obj.overall_summary
+                # storing the rationale of the batch selection
+                round_summaries[round][batch] = summary 
                 for winner_data in selection_obj.selected_winners:
                     # storing the results
                     winner_id = winner_data.candidate_id
-                    # state.round_rationale.setdefault(round_number, {})
-                    round_rationale[round_number][winner_id] = winner_data.justification
+                    # state.round_rationale.setdefault(round, {})
+                    round_rationale[round][winner_id] = winner_data.justification
                     # append the winner of round
                     winner_of_round[winner_id] = candidates_to_evaluate[winner_id]
-                    
             except Exception as e:
-                print(f"Error evaluating group {group_index + 1}: {e}")
-                # fall-back: if there is an error on the evaluation then the first candidate is selected
-                if group_ids:
-                    winner_of_round[group_ids[0]] = candidates_to_evaluate[group_ids[0]]
-        round_number += 1
+                print(f"Error evaluating the batch: {batch_index + 1} : {e}")
+                # fallback alternative
+                if batch:
+                    winner_of_round[batch[0]] = candidates_to_evaluate[batch[0]]
         candidates_to_evaluate = winner_of_round
         print(f"Round finished. {len(candidates_to_evaluate)} candidates were promoted")
+         
     # store the results from initial groups
     initial_groups_lookup = {
         cid : k for k, v in initial_groups.items() for cid in v # dictionary with ids : initial group values
@@ -306,7 +324,81 @@ def candidates_tournament(state : WorkflowState) -> WorkflowState:
         indent = 4
     )
     
-    return state
+    return state   
+    
+    # initial_groups = defaultdict[Any, dict](dict)
+    # round_number = 0
+    # # state.round_summaries = {}
+    # # state.round_rationale = {}
+    # round_summaries = defaultdict[Any, dict](dict)
+    # round_rationale = defaultdict[Any, dict](dict)
+    # # the loop ends with 10% of the candidates
+    # limit = ceil(len(state.candidates_dict.keys()) * 0.1)
+    # while len(candidates_to_evaluate) > limit + 1: 
+    #     candidate_ids = list[str](candidates_to_evaluate.keys())
+    #     random.shuffle(candidate_ids)
+    #     winner_of_round = {}
+    #     groups = [
+    #         candidate_ids[i : i + state.batch_size] for i in range(0, len(candidate_ids) + 1, state.batches)
+    #     ]
+    #     for group_index, group_ids in tqdm[tuple[int, list[str]]](enumerate(groups)):
+    #         # store the initial groups of the candidates
+    #         if round_number == 0:
+    #             initial_groups[group_index] = group_ids
+    #         # string for the cvs in the group
+    #         group_resumes_string = '\n---\n'.join([
+    #             f"Candidate ID: {cid}\nName: {state.candidates_names.get(cid, 'Unknown')}\nResume: {state.candidates_dict[cid]}" for cid in group_ids
+    #         ])
+    #         try:
+    #             selection_obj = selection_chain.invoke({
+    #                 "all_candidate_ids" : ", ".join(group_ids),
+    #                 "combined_criteria_list" : all_criteria,
+    #                 "group_resumes" : group_resumes_string
+    #             })
+    #             # this object has two attributes: selected_winners and overall_summary
+    #             # overall_summary is the overall explanation of the winners in the gruop
+    #             # selected_winners is a list of candidate_id, justification
+    #             # state.round_summaries.setdefault(round_number, {})
+    #             summary = getattr(selection_obj, "overall_summary", "")
+    #             round_summaries[round_number][group_index] = summary 
+    #             # state.round_summaries[round_number][group_index] = selection_obj.overall_summary
+    #             for winner_data in selection_obj.selected_winners:
+    #                 # storing the results
+    #                 winner_id = winner_data.candidate_id
+    #                 # state.round_rationale.setdefault(round_number, {})
+    #                 round_rationale[round_number][winner_id] = winner_data.justification
+    #                 # append the winner of round
+    #                 winner_of_round[winner_id] = candidates_to_evaluate[winner_id]
+                    
+    #         except Exception as e:
+    #             print(f"Error evaluating group {group_index + 1}: {e}")
+    #             # fall-back: if there is an error on the evaluation then the first candidate is selected
+    #             if group_ids:
+    #                 winner_of_round[group_ids[0]] = candidates_to_evaluate[group_ids[0]]
+    #     round_number += 1
+    #     candidates_to_evaluate = winner_of_round
+    #     print(f"Round finished. {len(candidates_to_evaluate)} candidates were promoted")
+    # # store the results from initial groups
+    # initial_groups_lookup = {
+    #     cid : k for k, v in initial_groups.items() for cid in v # dictionary with ids : initial group values
+    # }
+    # state.round_rationale = round_rationale
+    # state.round_summaries = round_summaries
+    # state.initial_groups = initial_groups_lookup
+    # state.top_candidates = candidates_to_evaluate
+    # # export the rationales
+    # dump(
+    #     obj = state.round_rationale,
+    #     fp = open(os.path.join(state.scores_folder, "tournament_rationales.json"), mode = "w"),
+    #     indent = 4
+    # )
+    # dump(
+    #     obj = state.round_summaries,
+    #     fp = open(os.path.join(state.scores_folder, "round_summaries.json"), mode = "w"),
+    #     indent = 4
+    # )
+    
+    # return state
     
 # 6. ranking candidates
 @execution_time
@@ -494,91 +586,6 @@ def generate_questions(state : WorkflowState) -> WorkflowState:
         )
     return state
         
-    # # reads the scores of the candidates
-    # scores_df = read_csv(
-    #     filepath_or_buffer = os.path.join(state.scores_folder, "scores.csv"),
-    #     index_col = "candidate_id"
-    # )
-    # # ids of the best candidates, and the number of candidates can be filtered
-    # best_candidates_ids = scores_df.sort_values(by = "overall_refined", ascending = False).head(3).index.to_list()
-    # # candidates files
-    # candidates_files = os.listdir(state.candidates_folder)
-    # # files of the best candidates
-    # best_candidates_paths = [
-    #     os.path.join(state.candidates_folder, f) for f in candidates_files if any(f.startswith(can_id) for can_id in best_candidates_ids)
-    # ]
-    # llm_constrained = llm.with_structured_output(schema = InterviewQuestions)
-    # questions_chain = interview_questions_prompt | llm_constrained
-    # for path in best_candidates_paths:
-    #     # generate interview questions for a candidate
-    #     msg = questions_chain.invoke({
-    #         "job_description" : state.job_description,
-    #         "candidate_resume" : text_extraction(path)
-    #     }) # structured output
-    #     name = msg.name
-    #     # exporing to JSON file
-    #     temp_file_path = os.path.join(state.scores_folder, f"interview_questions_{name}.json")
-    #     with open(temp_file_path, mode = "w") as json_file:
-    #         dump(
-    #             obj = msg.dict(),
-    #             fp = json_file,
-    #             indent = 4
-    #         )
-    # return state
-
-# 11. scores rationale for the top candidates
-# there is no need to implement this function considering that the big explanations were given in the tournament
-# @print_execution_status
-# def generate_explanations(state : WorkflowState) -> WorkflowState:
-#     """generate the explantions for the top candidates by comparing their resume and their scores in the most relevant criteria"""
-#     # list of list of criteria components
-#     all_criteria = [
-#         state.job_criteria.domains,
-#         state.job_criteria.technical_skills,
-#         state.job_criteria.soft_skills,
-#         state.job_criteria.culture
-#     ]
-#     # most relevant set of components
-#     most_relevant = all_criteria[np.argmax(state.job_criteria.weights)]
-#     # select top candidates
-#     scores_df = read_csv(
-#         filepath_or_buffer = os.path.join(state.scores_folder, "scores.csv"),
-#         index_col = "candidate_id"
-#     )
-#     # subset the top three candidates and their scores on the most relevant criteria components
-#     scores_df = scores_df.sort_values(by = 'overall_refined', ascending = False)[most_relevant].head(3)
-#     # candidate id and scores for the relevant components
-#     top_candidates = {
-#         i : scores_df.loc[i, most_relevant].values.reshape(-1,).tolist() for i in scores_df.index
-#     }
-#     # scoring combinations
-#     candidate_combinations = list(combinations(top_candidates.keys(), 2))
-#     # iterating over the comparisons
-#     for index, pair in enumerate(candidate_combinations):
-#         id_a, id_b = pair
-#         # constrain the response from the LLM
-#         llm_constrained = llm.with_structured_output(schema = GroupRationales)
-#         rationale_chain = rationale_prompt | llm_constrained
-#         msg = rationale_chain.invoke({
-#             "criteria_elements" : ', '.join(most_relevant),
-#             "candidate_1_id" : id_a,
-#             "candidate_1_scores" : ', '.join([f"{k}: {v}" for k, v in zip(most_relevant, top_candidates[id_a])]),
-#             "candidate_1_resume" : state.candidates_dict[id_a],
-#             "candidate_2_id" : id_b,
-#             "candidate_2_scores" : ', '.join([f"{k}: {v}" for k, v in zip(most_relevant, top_candidates[id_b])]),
-#             "candidate_2_resume" : state.candidates_dict[id_b]
-#         }).model_dump()
-        
-#         temp_file_path = os.path.join(state.scores_folder, f"candidate_explanation_{index + 1}.json")
-#         with open(temp_file_path, mode = "w") as json_file:
-#             dump(
-#                 obj = msg,
-#                 fp = json_file,
-#                 indent = 4
-#             )
-#     return state
-             
-### routing nodes
 # a. evaluation routing
 @print_execution_status
 def route_evalution(state : WorkflowState) -> Literal["accepted", "rejected"]:

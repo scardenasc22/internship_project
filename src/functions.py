@@ -5,6 +5,7 @@ import numpy as np
 from typing import Dict, Any
 from timeit import default_timer
 from schemas import CandidateExperience
+import random
 
 def text_extraction(
     file_path : str
@@ -221,3 +222,30 @@ def format_experience_for_prompt(candidate_exp) -> str:
         for r in responsibilities:
             lines.append(f"     - {r}")
     return "\n".join(lines)
+
+def candidate_simulation(
+    population : int,
+    batch_size : int,
+    selected_per_batch : int
+) -> None:
+    candidates = list(range(1, population + 1))
+    # controling the rounds
+    candidates_copy = candidates.copy()
+    round = 0
+    print(f"tournament simulation:")
+    while len(candidates_copy) > selected_per_batch:
+        # random ids
+        random.shuffle(candidates_copy)
+        # batches
+        batches = [
+            candidates_copy[i : batch_size + i] for i in range(0, len(candidates_copy) + 1, batch_size)
+        ]
+        # selection of the candidates per batch
+        round_winners = []
+        for b in batches:
+            winners = random.sample(b, k = min(selected_per_batch, len(b)))
+            for w in winners:
+                round_winners.append(w)
+        print(f"round {round + 1}. Initial candidates: {len(candidates_copy)} -> Final candidates: {len(round_winners)} ({len(round_winners)/population:.2%} of population)")
+        candidates_copy = round_winners
+        round += 1

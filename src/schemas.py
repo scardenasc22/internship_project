@@ -77,23 +77,35 @@ class CompanyDetails(BaseModel):
         description = "Brief description of the company"
     )
 
+class QAItem(BaseModel):
+    question: str = Field(description="Interview question")
+    look_for: str = Field(description="What the recruiter should look for in the candidate's answer")
+
+    @field_validator("question", "look_for")
+    @classmethod
+    def must_be_non_empty_trimmed(cls, v: str) -> str:
+        v = v.strip()
+        if not v:
+            raise ValueError("Value cannot be empty")
+        return v
+
 class InterviewQuestions(BaseModel):
     """generation of interview questions"""
-    # name : str = Field(
-    #     description = "Name of the candidate"
-    # )
-    experience_questions : List[str] = Field(
-        description = "List of questions aimed to clarify or expand upon the candidate's professional experience"
+    experience_questions: List[QAItem] = Field(
+        description="4 items clarifying or expanding upon the candidate's experience"
     )
-    situational_questions : List[str] = Field(
-        description = "List of questions aimed to understand the candidate's behavior, problem-solving abilities, and soft skills in relation to the target role"
+    situational_questions: List[QAItem] = Field(
+        description="4 items about behavior, problem-solving, and soft skills"
     )
-    @field_validator("experience_questions", "situational_questions")
+    technical_questions: List[QAItem] = Field(
+        description="4 items about tools, technologies, and practices relevant to the role"
+    )
+
+    @field_validator("experience_questions", "situational_questions", "technical_questions")
     @classmethod
-    def check_questions(cls, v: List[int]):
-        # This validator is crucial for ensuring data integrity
-        if len(v) == 0:
-            raise ValueError("The list should contain at least one value")
+    def exactly_four(cls, v: List[QAItem]) -> List[QAItem]:
+        if len(v) != 4:
+            raise ValueError("Each category must contain exactly 4 items")
         return v
 
 class JobExperience(BaseModel):
@@ -142,8 +154,10 @@ class WorkflowState(BaseModel):
     candidates_dict : Optional[Dict[str, str]] = None
     # dictionary of the scores of each candidate
     candidates_scores : Optional[Dict] = None
-    # number of batches
-    batches : Optional[int] = 4
+    # tournament conditions
+    batch_size : Optional[int] = 5
+    selected_per_batch : Optional[int] = 2
+    number_of_rounds : Optional[int] = 2
     # storing folder
     scores_folder : str 
     # dictionary with candidate experience

@@ -57,7 +57,15 @@
 * force the names or ids on the explantions per round (include that name medatada con the prompt)
 
 
--- what should we look for on every answer?
--- strenghts and weakness summary
--- refine technical questions
--- results from different models
+* what should we look for on every answer? - Done
+* strenghts and weakness summary
+* refine technical questions - DONE
+* results from different models
+
+What to do 20250211?
+* modifiy the tournament selection prompt to adjust the number of candidates
+* before running the tournament, show the user how many candidates
+will be at the end of every round, and allow to set the rounds manually
+* strenghts and weaknesses of each of the top candidates
+* run the workflow with different models
+* prepare the presentation
