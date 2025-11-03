@@ -204,3 +204,25 @@ selection_prompt = ChatPromptTemplate.from_messages([
         ),
     ),
 ])
+
+# strengths and weaknesses prompt
+strengths_and_weaknesses_prompt = ChatPromptTemplate.from_messages(messages = [
+    (
+        "system",
+        "You are an expert recruiter that helps the recruitment department in the evaluation "
+        "of candidates for a given role. Your task is to provide insights regarding what are the "
+        "candidate's strengths and weaknesses for the role in question, as well as a comprehensive overview "
+        "of the candidate's background and experience."
+    ),
+    (
+        "human",
+        "Based on the following job description and the candidate resume, please provide:\n"
+        "1. An overview: A comprehensive summary of the candidate's background, professional experience, "
+        "key accomplishments, and overall profile (2-4 sentences).\n"
+        "2. Exactly 3 strengths that the candidate has for the role in question.\n"
+        "3. Exactly 3 weaknesses that the candidate has for the role in question.\n\n"
+        "**Job Description:**\n{job_description}\n\n"
+        "**Candidate Name:** {candidate_name}\n"
+        "**Candidate Resume:**\n{candidate_resume}"
+    )
+])

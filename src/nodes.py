@@ -8,7 +8,8 @@ from schemas import (
     InterviewQuestions,
     CandidateExperience,
     GroupRationales,
-    GroupWinners
+    GroupWinners,
+    CandidateFeedback
 )
 from functions import (
     print_execution_status,
@@ -32,7 +33,8 @@ from prompts import (
     interview_questions_prompt,
     exp_extraction_prompt,
     rationale_prompt,
-    selection_prompt
+    selection_prompt,
+    strengths_and_weaknesses_prompt
 )
 from langchain_core.messages import HumanMessage, AIMessage
 from typing import Any, Literal
@@ -49,9 +51,15 @@ random.seed(2000)
 # loading environment variables
 load_dotenv()
 
+GPT_4O_MINI = "gpt-4o-mini-2024-07-18" # Not reasoning -- DONE
+GPT_4O = "gpt-4o-2024-08-06" # not reasoning -- DONE
+GPT_O3_MINI = "o3-mini-2025-01-31" # reasoning -- DONE
+GPT_5_MINI = "gpt-5-mini-2025-08-07" # frontier model -- DONE
+GPT_5 = "gpt-5-2025-08-07" # frontier model -- DONE
+
 # one of the multiple LLMs that can be leveraged according to the task
 llm = ChatOpenAI(
-    model = "gpt-4o-2024-08-06"
+    model = GPT_5
 )
 # tools to search information on the web
 web_search = TavilySearch(
@@ -222,22 +230,24 @@ def tournament_simulation(state : WorkflowState) -> WorkflowState:
         print(f"The tournament conditions are:")
         print(f"- population: {population}")
         print(f"- batch size: {state.batch_size}")
-        print(f"- selection per batch: {state.batch_size}")
-        print('-'*30)
+        print(f"- selection per batch: {state.selected_per_batch}")
+        print('*'*30 + "\n")
         candidate_simulation(
             population = population,
             batch_size = state.batch_size,
             selected_per_batch = state.selected_per_batch
         )
-        parameters_feedback = input("Do you approve this parameters?")
+        print('*'*30 + "\n")
+        parameters_feedback = input("Do you approve this parameters?\n")
         if parameters_feedback.lower() in ['yes', 'y']:
-            suggested_rounds = input("how many rounds do you wish to run?")
+            suggested_rounds = input("how many rounds do you wish to run?\n")
             state.number_of_rounds = int(suggested_rounds)
             parameters_approval = True
         else:
+            print('*'*30 + "\n")
             print("Modify the parameters of the tournament")
-            suggested_batch_size = input("What batch size do you wish to use?")
-            suggested_selection_per_batch = input("How many candidates do you whish to select per batch?")
+            suggested_batch_size = input("What batch size do you wish to use?\n")
+            suggested_selection_per_batch = input("How many candidates do you whish to select per batch?\n")
             state.batch_size = int(suggested_batch_size)
             state.selected_per_batch = int(suggested_selection_per_batch)
     return state
@@ -460,6 +470,9 @@ def export_scores(state : WorkflowState) -> WorkflowState:
     scores_df_reset['names'] = scores_df_reset['candidate_id'].map(state.candidates_names)
     scores_df_reset['group_id'] = scores_df_reset['candidate_id'].map(state.initial_groups)
     scores_df = scores_df_reset.set_index(['candidate_id'])
+    # if not os.path.exists(state.scores_folder):
+    #     print(f"creating the folder: '{state.scores_folder}'")
+    #     os.mkdir(state.scores_folder)
     # export to csv
     scores_df.to_csv(
         path_or_buf = os.path.join(state.scores_folder, "scores.csv"),
@@ -578,6 +591,30 @@ def generate_questions(state : WorkflowState) -> WorkflowState:
         tmp_file_name = os.path.join(
             state.scores_folder,
             f"interview_questions_{state.candidates_names[cid]}.json"
+        )
+        dump(
+            obj = tmp_dict,
+            fp = open(tmp_file_name, mode = "w"),
+            indent = 4
+        )
+    return state
+
+# 11. generate candidate feedback
+@print_execution_status
+def generate_candidate_overview(state : WorkflowState) -> WorkflowState:
+    """generate an overview of the candidate, their strengths and weaknesses"""
+    llm_constrained = llm.with_structured_output(schema = CandidateFeedback)
+    overview_chain = strengths_and_weaknesses_prompt | llm_constrained
+    for cid, resume in state.top_candidates.items():
+        msg = overview_chain.invoke(input = {
+            "job_description" : state.job_description,
+            "candidate_name" : state.candidates_names.get(cid, ""),
+            "candidate_resume" : resume
+        })
+        tmp_dict = msg.model_dump()
+        tmp_file_name = os.path.join(
+            state.scores_folder,
+            f"strengts_and_weaknesses_{state.candidates_names[cid]}.json"
         )
         dump(
             obj = tmp_dict,

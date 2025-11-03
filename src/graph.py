@@ -13,7 +13,8 @@ from nodes import (
     calculate_overall_score,
     extract_experience,
     candidates_tournament,
-    tournament_simulation
+    tournament_simulation,
+    generate_candidate_overview
     # generate_explanations
 )
 from functions import text_extraction
@@ -34,6 +35,7 @@ workflow.add_node("calculate_overall_score", calculate_overall_score)
 workflow.add_node("generate_questions", generate_questions)
 workflow.add_node("extract_experience", extract_experience)
 workflow.add_node("tournament_simulation", tournament_simulation)
+workflow.add_node("generate_candidate_overview", generate_candidate_overview)
 
 # workflow.add_node("generate_explanations", generate_explanations)
 # connecting the nodes
@@ -65,7 +67,8 @@ workflow.add_edge("score_candidates", "export_scores")
 workflow.add_edge("export_scores", "calculate_overall_score")
 workflow.add_edge("calculate_overall_score", "extract_experience")
 workflow.add_edge("extract_experience", "generate_questions")
-workflow.add_edge("generate_questions", END)
+workflow.add_edge("generate_questions", "generate_candidate_overview")
+workflow.add_edge("generate_candidate_overview", END)
 # workflow.add_edge("generate_explanations", END)
 # compile the workflow
 compiled_workflow = workflow.compile()
@@ -80,7 +83,9 @@ test_input = WorkflowState(
     ),
     candidates_folder = os.path.join(root, "data", "raw", "cv"),
     count = 0,
-    scores_folder = os.path.join(root, "data", "processed")
+    scores_folder = os.path.join(root, "data", "gpt_5_results"),
+    batch_size = 5,
+    selected_per_batch = 2
 )
 # test the workflow
 compiled_workflow.invoke(

@@ -63,9 +63,12 @@
 * results from different models
 
 What to do 20250211?
-* modifiy the tournament selection prompt to adjust the number of candidates
-* before running the tournament, show the user how many candidates
+* modifiy the tournament selection prompt to adjust the number of candidates (DONE)
+* before running the tournament, show the user how many candidates (DONE)
 will be at the end of every round, and allow to set the rounds manually
 * strenghts and weaknesses of each of the top candidates
 * run the workflow with different models
 * prepare the presentation
+
+-- standard criteria
+Data Analytics,Business Transformation,Information Technology,Analytical Methodologies,Data Literacy,Understanding of ETL Processes,Problem Solving,Client Engagement,Collaboration,Team-oriented,Eager to Learn,Adaptability

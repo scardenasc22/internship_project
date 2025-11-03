@@ -139,6 +139,22 @@ class GroupWinners(BaseModel):
     # You can also add a field for an overall comparison summary if helpful
     overall_summary: str = Field(..., description="A brief summary of the key difference between the winners and the rest of the group.")
 
+class CandidateFeedback(BaseModel):
+    overview : str = Field(
+        description = "A comprehensive summary of the candidate based on their resume, highlighting their background, experience, and overall fit for the role"
+    )
+    strengths : List[str] = Field(
+        description = "list of the candidate's strengths for the target role"
+    )
+    weaknesses : List[str] = Field(
+        description = "list of the candidate's weaknesses for the target role"
+    )
+    @field_validator("strengths", "weaknesses")
+    @classmethod
+    def exactly_three(cls, v: List[str]) -> List[str]:
+        if len(v) != 3:
+            raise ValueError("Each category must contain exactly 3 items")
+        return v
 
 class WorkflowState(BaseModel):
     """information that will flow through the graph"""
