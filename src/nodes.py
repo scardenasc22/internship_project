@@ -59,7 +59,7 @@ GPT_5 = "gpt-5-2025-08-07" # frontier model -- DONE
 
 # one of the multiple LLMs that can be leveraged according to the task
 llm = ChatOpenAI(
-    model = GPT_5
+    model = GPT_4O
 )
 # tools to search information on the web
 web_search = TavilySearch(

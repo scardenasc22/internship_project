@@ -83,7 +83,7 @@ test_input = WorkflowState(
     ),
     candidates_folder = os.path.join(root, "data", "raw", "cv"),
     count = 0,
-    scores_folder = os.path.join(root, "data", "gpt_5_results"),
+    scores_folder = os.path.join(root, "data", "processed"),
     batch_size = 5,
     selected_per_batch = 2
 )

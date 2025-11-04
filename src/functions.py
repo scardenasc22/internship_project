@@ -243,7 +243,11 @@ def candidate_simulation(
         # selection of the candidates per batch
         round_winners = []
         for b in batches:
-            winners = random.sample(b, k = min(selected_per_batch, len(b)))
+            if len(b) < batch_size:
+                n = 1
+            else:
+                n = selected_per_batch
+            winners = random.sample(b, k = min(n, len(b)))
             for w in winners:
                 round_winners.append(w)
         print(f"round {round + 1}. Initial candidates: {len(candidates_copy)} -> Final candidates: {len(round_winners)} ({len(round_winners)/population:.2%} of population)")

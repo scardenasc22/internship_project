@@ -71,4 +71,5 @@ will be at the end of every round, and allow to set the rounds manually
 * prepare the presentation
 
 -- standard criteria
-Data Analytics,Business Transformation,Information Technology,Analytical Methodologies,Data Literacy,Understanding of ETL Processes,Problem Solving,Client Engagement,Collaboration,Team-oriented,Eager to Learn,Adaptability
+Data Analytics,Business Transformation,Information Technology,Analytical Methodologies,Data Literacy,Understanding of ETL Processes,Problem Solving,Client Engagement,Collaboration,Team-oriented,Eager to Learn,Adaptabilitymake questions relevant to the level of experience of the role
+make adjustmen on experience questions as well
