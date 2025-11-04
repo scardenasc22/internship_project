@@ -587,10 +587,11 @@ def generate_questions(state : WorkflowState) -> WorkflowState:
             "candidate_experience" : format_experience_for_prompt(state.candidates_exp[cid])
         })
         tmp_dict = msg.model_dump()
-        tmp_dict['name'] = state.candidates_names[cid]
+        tmp_dict['name'] = state.candidates_names.get(cid, "")
+        tmp_dict['id'] = cid
         tmp_file_name = os.path.join(
             state.scores_folder,
-            f"interview_questions_{state.candidates_names[cid]}.json"
+            f"interview_questions_{state.candidates_names.get(cid, "")}.json"
         )
         dump(
             obj = tmp_dict,
@@ -612,9 +613,10 @@ def generate_candidate_overview(state : WorkflowState) -> WorkflowState:
             "candidate_resume" : resume
         })
         tmp_dict = msg.model_dump()
+        tmp_dict['id'] = cid
         tmp_file_name = os.path.join(
             state.scores_folder,
-            f"strengts_and_weaknesses_{state.candidates_names[cid]}.json"
+            f"strengts_and_weaknesses_{state.candidates_names.get(cid, "")}.json"
         )
         dump(
             obj = tmp_dict,

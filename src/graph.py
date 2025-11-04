@@ -19,6 +19,7 @@ from nodes import (
 )
 from functions import text_extraction
 import os
+import argparse
 
 # creating the graph
 workflow = StateGraph(WorkflowState)
@@ -77,15 +78,73 @@ compiled_workflow = workflow.compile()
 # sample input
 root = os.getcwd()
 
+parser = argparse.ArgumentParser(
+        description="Run the candidate evaluation workflow",
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+        epilog="""
+Examples:
+  python3 src/graph.py
+  python3 src/graph.py --cv-folder data/raw/cv --job-description data/raw/job/data_role_des.txt
+  python3 src/graph.py --batch-size 10 --selected-per-batch 3 --scores-folder data/custom_results
+        """
+    )
+    
+parser.add_argument(
+        "--job-description",
+        type=str,
+        default=os.path.join(root, "data/raw/job/data_role_des.txt"),
+        help="Path to the job description text file (default: data/raw/job/data_role_des.txt)"
+    )
+    
+parser.add_argument(
+        "--cv-folder",
+        type=str,
+        default=os.path.join(root, "data", "raw", "cv"),
+        help="Path to the folder containing candidate resumes (default: data/raw/cv)"
+    )
+    
+parser.add_argument(
+        "--scores-folder",
+        type=str,
+        default=os.path.join(root, "data", "gpt_5_results"),
+        help="Path to the output folder for results (default: data/gpt_5_results)"
+    )
+    
+parser.add_argument(
+        "--batch-size",
+        type=int,
+        default=5,
+        help="Number of candidates per tournament batch (default: 5)"
+    )
+    
+parser.add_argument(
+        "--selected-per-batch",
+        type=int,
+        default=2,
+        help="Number of candidates to select as winners per batch (default: 2)"
+    )
+    
+args = parser.parse_args()
+
+# Validate paths exist
+if not os.path.exists(args.job_description):
+    raise FileNotFoundError(f"Job description file not found: {args.job_description}")
+
+if not os.path.exists(args.cv_folder):
+    raise FileNotFoundError(f"Candidates folder not found: {args.cv_folder}")
+
+# Create scores folder if it doesn't exist
+os.makedirs(args.scores_folder, exist_ok=True)
+
 test_input = WorkflowState(
     job_description = text_extraction(
-        file_path = os.path.join(root, "data/raw/job/data_role_des.txt")
+        file_path = args.job_description
     ),
-    candidates_folder = os.path.join(root, "data", "raw", "cv"),
+    candidates_folder = args.cv_folder,
     count = 0,
-    scores_folder = os.path.join(root, "data", "processed"),
-    batch_size = 5,
-    selected_per_batch = 2
+    scores_folder = args.scores_folder,
+    batch_size = args.batch_size,
+    selected_per_batch = args.selected_per_batch
 )
 # test the workflow
 compiled_workflow.invoke(
