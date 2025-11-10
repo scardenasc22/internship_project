@@ -591,7 +591,7 @@ def generate_questions(state : WorkflowState) -> WorkflowState:
         tmp_dict['id'] = cid
         tmp_file_name = os.path.join(
             state.scores_folder,
-            f"interview_questions_{state.candidates_names.get(cid, "")}.json"
+            f"interview_questions_{state.candidates_names.get(cid, '')}.json"
         )
         dump(
             obj = tmp_dict,
@@ -616,7 +616,7 @@ def generate_candidate_overview(state : WorkflowState) -> WorkflowState:
         tmp_dict['id'] = cid
         tmp_file_name = os.path.join(
             state.scores_folder,
-            f"strengts_and_weaknesses_{state.candidates_names.get(cid, "")}.json"
+            f"strengts_and_weaknesses_{state.candidates_names.get(cid, '')}.json"
         )
         dump(
             obj = tmp_dict,
