@@ -106,8 +106,8 @@ parser.add_argument(
 parser.add_argument(
         "--scores-folder",
         type=str,
-        default=os.path.join(root, "data", "gpt_5_results"),
-        help="Path to the output folder for results (default: data/gpt_5_results)"
+        default=os.path.join(root, "data", "results"),
+        help="Path to the output folder for results (default: data/results)"
     )
     
 parser.add_argument(
